@@ -1,0 +1,3040 @@
+<!DOCTYPE html>
+<html lang="es" data-bs-theme="dark">
+<head>
+<meta charset="UTF-8">
+<title>Validador de Avisos</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<style>
+  :root {
+    --bg: #0b0e13;
+    --panel: #12161d;
+    --panel2: #171c24;
+    --border: #232a35;
+    --text: #e7ebf0;
+    --muted: #7e8998;
+    --ok: #2fb673;
+    --bad: #e5484d;
+    --warn: #d9a441;
+    --accent: #3373f2;
+    --accent2: #2698a8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 20px;
+  }
+  h1 { font-size: 20px; margin-bottom: 2px; }
+  p.sub { color: var(--muted); margin-top: 0; font-size: 13px; }
+
+  .tabs { display: flex; gap: 4px; margin: 16px 0; border-bottom: 1px solid var(--border); }
+  .tab {
+    padding: 10px 18px;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 600;
+    border-bottom: 2px solid transparent;
+    border-radius: 8px 8px 0 0;
+    transition: all 0.14s ease;
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .tab i { font-size: 15px; }
+  .tab-count-badge {
+    display: inline-block; background: var(--warn); color: #3a2703; font-size: 10px; font-weight: 800;
+    padding: 1px 7px; border-radius: 999px; margin-left: 4px; vertical-align: 2px;
+  }
+
+  .semaforo {
+    display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-radius: 12px;
+    margin-top: 12px; font-weight: 800; font-size: 16px;
+  }
+  .semaforo .semaforo-pct { font-size: 26px; font-weight: 900; }
+  .semaforo .semaforo-sub { font-size: 12px; font-weight: 600; opacity: 0.85; margin-top: 2px; }
+  .semaforo.sem-ok { background: rgba(47,182,115,0.14); border: 1px solid rgba(47,182,115,0.4); color: var(--ok); }
+  .semaforo.sem-warn { background: rgba(217,164,65,0.14); border: 1px solid rgba(217,164,65,0.4); color: var(--warn); }
+  .semaforo.sem-bad { background: rgba(229,72,77,0.14); border: 1px solid rgba(229,72,77,0.4); color: var(--bad); }
+  .semaforo i { font-size: 34px; }
+  h1 i { font-size: 22px; }
+  button i, .icon-btn i { font-size: 13px; vertical-align: -1px; }
+  .tab:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+  .tab.active {
+    color: var(--text);
+    border-bottom-color: var(--accent);
+    background: rgba(51,115,242,0.08);
+  }
+  .view { display: none; }
+  .view.active { display: block; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  textarea {
+    width: 100%;
+    min-height: 140px;
+    background: #0d0f14;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px;
+    resize: vertical;
+  }
+  .row { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+  button {
+    background: var(--accent);
+    color: white;
+    border: 1px solid var(--accent);
+    padding: 9px 15px;
+    border-radius: 7px;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    transition: background 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
+  }
+  button:hover { background: #4a82f5; border-color: #4a82f5; }
+  button:active { transform: translateY(1px); }
+  button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); box-shadow: none; }
+  button.secondary:hover { border-color: var(--accent); color: var(--accent); background: rgba(51,115,242,0.06); }
+  button.danger { background: transparent; border: 1px solid var(--bad); color: var(--bad); padding: 4px 8px; font-size: 11px; box-shadow: none; }
+  button.small { padding: 5px 10px; font-size: 12px; }
+
+  .stats { display: flex; gap: 10px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+  .stats b { color: var(--text); }
+  .stat-clic { cursor: pointer; border-radius: 6px; padding: 2px 6px; transition: background 0.12s ease; }
+  .stat-clic:hover { background: rgba(255,255,255,0.06); text-decoration: underline; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 700; text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.04em; position: sticky; top: 0; background: var(--panel2); z-index: 1; box-shadow: 0 1px 0 var(--border); }
+  tbody tr { transition: background 0.12s ease; }
+  tbody tr:hover { background: rgba(255, 255, 255, 0.035); }
+  tr.bad { background: rgba(255, 92, 92, 0.07); }
+  tr.bad:hover { background: rgba(255, 92, 92, 0.12); }
+  tr.warn { background: rgba(245, 185, 66, 0.07); }
+  tr.warn:hover { background: rgba(245, 185, 66, 0.12); }
+
+  th.filterable { cursor: pointer; user-select: none; white-space: nowrap; transition: color 0.12s ease, background 0.12s ease; }
+  th.filterable:hover { color: var(--text); background: var(--panel); }
+  th.filterable .arrow { display: inline-block; margin-left: 4px; font-size: 9px; opacity: 0.55; transition: transform 0.15s ease; }
+  th.filterable.active-filter { color: var(--accent); background: rgba(91, 140, 255, 0.12); box-shadow: inset 0 0 0 1px rgba(91, 140, 255, 0.35), 0 1px 0 var(--border); }
+  th.filterable.active-filter .arrow { opacity: 1; transform: rotate(180deg); }
+  th.filterable .subfiltro { display: block; margin-top: 2px; font-size: 9px; font-weight: 600; letter-spacing: 0.01em; text-transform: none; color: var(--accent); }
+
+  /* Badges como bloques de color solidos (no solo texto de color) */
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 11px; border-radius: 999px; font-size: 10.5px; font-weight: 800; white-space: nowrap; letter-spacing: 0.02em; }
+  .badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+  .badge.ok { background: var(--ok); color: #06301c; }
+  .badge.ok::before { background: #06301c; }
+  .badge.bad { background: var(--bad); color: #3a0508; }
+  .badge.bad::before { background: #3a0508; }
+  .badge.warn { background: var(--warn); color: #3a2703; }
+  .badge.warn::before { background: #3a2703; }
+  .badge.corregido { background: var(--accent); color: #fff; }
+  .badge.corregido::before { background: #fff; }
+
+  /* Bloque de error(es) debajo de cada celda de la columna a la que pertenecen */
+  .cell-errores { margin-top: 6px; display: flex; flex-direction: column; gap: 5px; }
+  .cell-err-item { font-size: 11px; line-height: 1.5; color: var(--bad); }
+  .cell-err-item.err-corregido { color: var(--ok); text-decoration: line-through; text-decoration-color: rgba(46,204,113,0.5); }
+
+  .errlist { margin: 5px 0 0 0; padding-left: 16px; color: var(--bad); font-size: 11.5px; line-height: 1.5; }
+  .errlist li { margin-bottom: 2px; }
+  .errlist li.err-clic { cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
+  .errlist li.err-clic:hover { color: #ff8080; }
+
+  .cell-ok { color: var(--ok); font-weight: 700; }
+  .cell-bad { color: var(--bad); font-weight: 700; }
+  .cell-sub { color: var(--muted); }
+
+  .empty { color: var(--muted); text-align: center; padding: 30px 0; }
+  code { background: #0d0f14; padding: 1px 5px; border-radius: 4px; }
+  .tablewrap { max-height: 60vh; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
+
+  input[type=text] {
+    background: #0d0f14; color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; font-size: 12.5px; width: 100%;
+    transition: border-color 0.12s ease;
+  }
+  input[type=text]:focus { outline: none; border-color: var(--accent); }
+  .filterbar { display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; align-items:center; }
+  select {
+    background: #0d0f14; color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; font-size: 12.5px; font-weight: 600;
+    cursor: pointer; transition: border-color 0.12s ease;
+  }
+  select:focus { outline: none; border-color: var(--accent); }
+  select.filtro-activo { border-color: var(--accent); color: var(--accent); background: rgba(91, 140, 255, 0.08); }
+  .save-hint { font-size: 11px; color: var(--muted); }
+
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 14px;
+    padding: 20px 24px;
+    transition: border-color 0.15s ease, background 0.15s ease;
+    background: var(--panel2);
+  }
+  .dropzone.dragover {
+    border-color: var(--accent);
+    background: rgba(51, 115, 242, 0.08);
+  }
+  .dz-icon { font-size: 24px; color: var(--accent); opacity: 0.85; }
+  .dz-title { font-size: 14px; font-weight: 700; color: var(--text); margin-top: 6px; }
+  .dz-sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+  /* ---- polish general ---- */
+  body {
+    background: var(--bg);
+  }
+  h1 {
+    letter-spacing: -0.01em;
+    display: inline-flex; align-items: center; gap: 10px;
+    color: var(--text);
+    font-weight: 700;
+  }
+  h1 i { color: var(--accent); font-size: 22px; }
+  .panel {
+    box-shadow: 0 1px 0 rgba(255,255,255,0.02), 0 4px 14px rgba(0,0,0,0.22);
+    position: relative;
+  }
+  .panel:hover { border-color: #2c3441; }
+
+  /* ---- formulario de referencia ---- */
+  .form-panel {
+    position: sticky; top: 8px; z-index: 5;
+    border-color: rgba(51,115,242,0.35);
+    background: var(--panel2);
+  }
+  .form-title { font-size: 13px; font-weight: 700; color: var(--accent); margin-bottom: 10px; letter-spacing: 0.01em; }
+  .form-grid { display: flex; gap: 10px; flex-wrap: wrap; }
+  .form-field { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 130px; }
+  .form-field label { font-size: 10.5px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+  .form-warning {
+    margin-top: 10px; padding: 9px 12px; border-radius: 8px;
+    background: rgba(245, 185, 66, 0.12); border: 1px solid rgba(245, 185, 66, 0.35);
+    color: var(--warn); font-size: 12.5px;
+  }
+  .form-existing-hint {
+    margin-top: 10px; padding: 9px 12px; border-radius: 8px;
+    background: rgba(91, 140, 255, 0.10); border: 1px solid rgba(91, 140, 255, 0.28);
+    color: #b9c8ff; font-size: 12px; line-height: 1.6;
+  }
+  .chip {
+    display: inline-block; background: rgba(91,140,255,0.16); border: 1px solid rgba(91,140,255,0.35);
+    color: #cfdaff; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; margin: 2px 3px 0 0;
+  }
+
+  .dup-cluster {
+    border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; background: var(--panel2);
+  }
+  .dup-familia {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+    color: var(--accent); margin-bottom: 8px;
+  }
+  .dup-item {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 7px 0; border-top: 1px solid var(--border);
+  }
+  .dup-item:first-of-type { border-top: none; }
+  .dup-item .dup-texto { font-weight: 700; font-size: 13px; }
+  .dup-item .dup-conjunto { color: var(--muted); font-size: 12px; flex: 1; min-width: 160px; }
+
+  /* ---- tabla referencia ---- */
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: var(--text); }
+  .sort-arrow { display: inline-block; margin-left: 4px; font-size: 9px; opacity: 0.6; }
+  .ref-row td { color: var(--text); }
+  .ref-actions { display: flex; gap: 5px; flex-wrap: nowrap; align-items: center; }
+  .ref-actions .icon-btn { padding: 5px 9px; white-space: nowrap; }
+  .ref-actions .icon-btn.del { padding: 5px 8px; }
+  button.icon-btn {
+    background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 12px; font-size: 12px; border-radius: 7px; font-weight: 600;
+    transition: all 0.12s ease; box-shadow: none; display: inline-flex; align-items: center; gap: 5px;
+  }
+  button.icon-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(51,115,242,0.08); }
+  button.icon-btn.del { color: var(--bad); border-color: rgba(229,72,77,0.35); }
+  button.icon-btn.del:hover { border-color: var(--bad); color: var(--bad); background: rgba(229,72,77,0.10); }
+  .confirm-row { display: flex; gap: 6px; align-items: center; font-size: 11.5px; color: var(--warn); }
+
+  @keyframes flashBg {
+    0% { background: rgba(245, 185, 66, 0.4); }
+    100% { background: transparent; }
+  }
+  tr.flash { animation: flashBg 1.8s ease; }
+
+  /* ---- estado de correccion en resultados ---- */
+  .fix-btn {
+    background: transparent; border: 1px solid var(--border); color: var(--muted);
+    font-size: 10px; padding: 3px 9px; border-radius: 999px; margin-left: 6px; cursor: pointer;
+    transition: all 0.14s ease; font-weight: 600;
+  }
+  .fix-btn:hover { border-color: var(--ok); color: var(--ok); background: rgba(46,204,113,0.10); transform: translateY(-1px); }
+  .fix-btn.undo { border-color: rgba(46,204,113,0.4); color: var(--ok); }
+  .fix-btn.undo:hover { border-color: var(--bad); color: var(--bad); background: rgba(255,92,92,0.10); }
+  .fix-btn.ignore { border-color: rgba(126,137,152,0.4); color: var(--muted); }
+  .fix-btn.ignore:hover { border-color: var(--muted); color: var(--text); background: rgba(126,137,152,0.14); }
+  li.err-corregido { color: var(--ok); text-decoration: line-through; text-decoration-color: rgba(46,204,113,0.5); }
+  .cell-err-item.err-ignorado { color: var(--muted); text-decoration: line-through; text-decoration-color: rgba(126,137,152,0.5); font-style: italic; }
+  li.err-pendiente { display: flex; align-items: center; flex-wrap: wrap; }
+  .tag-error {
+    display: inline-block; background: rgba(229,72,77,0.16); border: 1px solid rgba(229,72,77,0.4);
+    color: #ffb3b6; padding: 1px 8px; border-radius: 999px; font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.02em; text-decoration: none !important; margin-right: 2px;
+  }
+  li.err-corregido .tag-error {
+    background: rgba(46,204,113,0.12); border-color: rgba(46,204,113,0.35); color: var(--ok);
+  }
+
+  .diff-word {
+    background: rgba(255, 92, 92, 0.32); color: #fff; padding: 0 4px; border-radius: 4px;
+    font-weight: 800; box-shadow: 0 0 0 1px rgba(255,92,92,0.5);
+  }
+</style>
+</head>
+<body>
+
+  <h1><i class="bi bi-shield-check"></i> Validador de Avisos</h1>
+  <p class="sub">Tabla de referencia editable + validación automática de avisos.</p>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="validar"><i class="bi bi-clipboard2-check"></i> Validar avisos</div>
+    <div class="tab" data-tab="referencia"><i class="bi bi-bookmarks"></i> Tabla de referencia <span id="tabSinRefBadge" class="tab-count-badge" style="display:none;"></span></div>
+    <div class="tab" data-tab="informe"><i class="bi bi-bar-chart-line"></i> Informe de corregidos</div>
+  </div>
+
+  <!-- ================= VALIDAR ================= -->
+  <div class="view active" id="view-validar">
+    <div class="panel">
+      <div id="dropZone" class="dropzone d-flex align-items-center gap-3 py-2 px-3">
+        <i class="bi bi-file-earmark-arrow-up dz-icon"></i>
+        <div class="flex-grow-1">
+          <div class="dz-title">Arrastrá tu archivo Excel aquí</div>
+          <div class="dz-sub">o hacé clic para seleccionarlo · .xlsx / .xls</div>
+        </div>
+        <label class="btn btn-primary btn-sm px-3" for="fileInput">
+          <i class="bi bi-upload me-1"></i> Elegir archivo
+        </label>
+        <input type="file" id="fileInput" accept=".xlsx,.xls" class="visually-hidden" onchange="cargarExcel(this.files[0])">
+        <button class="secondary btn-sm" onclick="limpiarResultados()"><i class="bi bi-eraser"></i> Limpiar</button>
+      </div>
+      <div class="save-hint mt-1" id="fileHint"></div>
+      <div id="semaforoPanel" style="display:none;"></div>
+      <div class="row">
+        <div class="stats" id="stats"></div>
+      </div>
+    </div>
+
+    <div class="panel" id="filtrosResultadosPanel" style="display:none;">
+      <div class="filterbar">
+        <select id="filtroEstadoResultados" onchange="renderResultadosFiltrados()">
+          <option value="">Todos los estados</option>
+          <option value="ok">Solo OK</option>
+          <option value="mal">Solo con problemas pendientes</option>
+          <option value="corregido">Solo corregidos</option>
+          <option value="sinref">Solo sin referencia</option>
+        </select>
+        <select id="filtroNotiResultados" onchange="renderResultadosFiltrados()">
+          <option value="">Notificado: todos</option>
+          <option value="noti">Solo notificados</option>
+          <option value="sinnoti">Solo sin notificar</option>
+        </select>
+        <select id="filtroTipoError" onchange="renderResultadosFiltrados()">
+          <option value="">Tipo de error: todos</option>
+          <option value="orden">Falta la Orden</option>
+          <option value="textobreve,redaccion">Objeto/Texto breve (código o redacción)</option>
+          <option value="textobreve">— Solo código no coincide</option>
+          <option value="redaccion">— Solo redacción no coincide</option>
+          <option value="conjunto">Conjunto no corresponde</option>
+          <option value="ptotrabajo">Pto.trabajo distinto de UCO_CS</option>
+          <option value="status,nliq">Status (notificado o NLIQ)</option>
+          <option value="status">— Solo sin notificar</option>
+          <option value="nliq">— Solo sin NLIQ</option>
+        </select>
+        <select id="filtroDuracion" onchange="renderResultadosFiltrados()">
+          <option value="">Duración: todas</option>
+          <option value="10">Más de 10 minutos</option>
+          <option value="60">Más de 60 minutos</option>
+        </select>
+        <button class="secondary" onclick="limpiarFiltrosResultados()"><i class="bi bi-x-circle"></i> Limpiar filtros</button>
+        <button class="secondary" onclick="exportarResultadosXLSX()" style="margin-left:auto;"><i class="bi bi-file-earmark-spreadsheet"></i> Exportar (Excel)</button>
+      </div>
+    </div>
+
+    <div class="panel" id="resultados" style="overflow:auto;">
+      <div class="empty">Todavía no hay resultados. Subí un archivo Excel para empezar.</div>
+    </div>
+  </div>
+
+  <!-- ================= REFERENCIA ================= -->
+  <div class="view" id="view-referencia">
+    <div class="panel" style="border-color:rgba(217,164,65,0.4); background:rgba(217,164,65,0.06);">
+      <div class="form-title" style="color:var(--warn);"><i class="bi bi-shield-exclamation"></i> Copia de seguridad completa</div>
+      <p style="margin:6px 0 12px 0;font-size:12.5px;color:var(--muted)">
+        Todo lo que armaste (tabla de conjuntos, status de usuario, clasificación de motivo y diccionario de typos)
+        se guarda <b>en la nube y es compartido por todos los que abran esta app</b>: un cambio tuyo lo ven los demás.
+        Aun así, descarga esta copia de vez en cuando como respaldo adicional, y úsala para restaurar si alguien
+        borra o cambia algo por error.
+      </p>
+      <div class="row" style="margin-top:0;">
+        <button onclick="exportarTodo()"><i class="bi bi-download"></i> Descargar copia completa (todo en un archivo)</button>
+        <label class="secondary" style="display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">
+          <i class="bi bi-upload"></i> Restaurar desde archivo
+          <input type="file" accept=".json" style="display:none" onchange="importarTodo(this.files[0]); this.value='';">
+        </label>
+        <span class="save-hint" id="backupHint"></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <p style="margin-top:0;font-size:13px;color:var(--muted)">
+        Esta es tu tabla de verdad: para cada <b>novedad</b> (texto de la falla) + <b>generación de máquina</b>,
+        definís cuál es la <b>denominación de conjunto</b> y su <b>código</b> correctos. La app la usa para
+        detectar avisos donde el conjunto seleccionado no corresponde.
+      </p>
+      <p style="margin:8px 0 0 0;font-size:12px;color:var(--warn)">
+        ⚠ Los cambios se guardan en la nube para todos. Quien tenga el enlace puede editar esta tabla, así que
+        revisa bien antes de borrar o importar.
+      </p>
+      <div class="row">
+        <button onclick="cancelarEdicionRef(); document.getElementById('refFormPanel').scrollIntoView({behavior:'smooth'}); document.getElementById('fGeneracion').focus();">+ Agregar fila</button>
+        <button class="secondary" onclick="exportarReferencia()"><i class="bi bi-cloud-download"></i> Exportar tabla (backup)</button>
+        <label class="secondary" style="display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">
+          ⬆ Importar tabla
+          <input type="file" accept=".json" style="display:none" onchange="importarReferencia(this.files[0]); this.value='';">
+        </label>
+        <button class="secondary" onclick="renderDuplicados()"><i class="bi bi-search"></i> Detectar posibles errores de escritura</button>
+        <span class="save-hint" id="saveHint"></span>
+      </div>
+    </div>
+
+    <div class="panel" id="duplicadosPanel" style="display:none;"></div>
+
+    <div class="panel">
+      <div class="form-title"><i class="bi bi-clipboard2-pulse"></i> Status de usuario esperado (para el otro formato de Excel)</div>
+      <p style="margin:0 0 12px 0;font-size:12.5px;color:var(--muted)">
+        Solo aplica a los archivos que traen la columna "Status de usuario" (ZRAU/A00/A01/A02) en vez de "Status del sistema".
+        Los avisos en ZRAU no necesitan esta validación. Para el resto, definí acá cuál status corresponde a cada novedad
+        (y si depende de que la máquina termine en T4).
+      </p>
+      <div class="form-grid">
+        <div class="form-field"><label>Novedad</label><input type="text" id="estNovedad" placeholder="Ej: NO LEE TARJETAS"></div>
+        <div class="form-field" style="max-width:140px;"><label>¿Termina en T4?</label>
+          <select id="estT4"><option value="no">No</option><option value="si">Sí</option></select>
+        </div>
+        <div class="form-field" style="max-width:140px;"><label>Status esperado</label><input type="text" id="estStatusEsperado" placeholder="Ej: A01"></div>
+      </div>
+      <div class="row">
+        <button onclick="agregarEstatus()"><i class="bi bi-plus-lg"></i> <span id="estBtnLabel">Agregar</span></button>
+        <button class="secondary" id="estBtnCancelar" style="display:none;" onclick="cancelarEdicionEstatus()">Cancelar</button>
+      </div>
+      <input type="text" id="estatusFiltro" placeholder="Buscar novedad..." oninput="renderReferenciaEstatus()" style="max-width:280px;margin-top:12px;">
+      <div class="tablewrap" style="margin-top:10px;">
+        <table>
+          <thead><tr><th style="width:40%">Novedad</th><th style="width:18%">¿T4?</th><th style="width:18%">Status esperado</th><th style="width:24%">Acciones</th></tr></thead>
+          <tbody id="estatusBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="form-title"><i class="bi bi-diagram-3"></i> Clasificación del motivo esperada (para el archivo más completo)</div>
+      <p style="margin:0 0 12px 0;font-size:12.5px;color:var(--muted)">
+        Solo aplica cuando el Excel trae las columnas "Grupo códigos", "Texto código del problema", "Texto código motivo" y
+        "Texto de la causa". Definí acá la combinación correcta para cada novedad — si un aviso trae una combinación distinta,
+        se marca como error.
+      </p>
+      <div class="form-grid">
+        <div class="form-field"><label>Novedad</label><input type="text" id="motNovedad" placeholder="Ej: NO LEE TARJETAS"></div>
+        <div class="form-field"><label>Grupo códigos</label><input type="text" id="motGrupo" placeholder="Ej: ELECTRÓN"></div>
+      </div>
+      <div class="form-grid" style="margin-top:10px;">
+        <div class="form-field"><label>Texto código del problema</label><input type="text" id="motProblema" placeholder="Ej: No lee"></div>
+        <div class="form-field"><label>Texto código motivo</label><input type="text" id="motMotivo" placeholder="Ej: Aplicativo no funciona"></div>
+        <div class="form-field"><label>Texto de la causa</label><input type="text" id="motCausa" placeholder="Ej: BLOQUEO LOGICO DE LECTORA"></div>
+      </div>
+      <div class="row">
+        <button onclick="agregarMotivo()"><i class="bi bi-plus-lg"></i> <span id="motBtnLabel">Agregar</span></button>
+        <button class="secondary" id="motBtnCancelar" style="display:none;" onclick="cancelarEdicionMotivo()">Cancelar</button>
+      </div>
+      <input type="text" id="motivoFiltro" placeholder="Buscar novedad..." oninput="renderReferenciaMotivo()" style="max-width:280px;margin-top:12px;">
+      <div class="tablewrap" style="margin-top:10px;">
+        <table>
+          <thead><tr><th style="width:20%">Novedad</th><th style="width:14%">Grupo</th><th style="width:18%">Problema</th><th style="width:20%">Motivo</th><th style="width:18%">Causa</th><th style="width:10%">Acciones</th></tr></thead>
+          <tbody id="motivoBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="form-title"><i class="bi bi-journal-text"></i> Diccionario manual de errores conocidos</div>
+      <p style="margin:0 0 12px 0;font-size:12.5px;color:var(--muted)">
+        Para typos que el sistema no detecte solo, agregalos acá directamente: "así está mal escrito" → "así se escribe correcto".
+        Estos se aplican siempre, sin depender de ningún cálculo.
+      </p>
+      <div class="form-grid">
+        <div class="form-field">
+          <label>Está mal escrito así</label>
+          <input type="text" id="fTypoIncorrecta" placeholder='Ej: NO EE TARJETAS'>
+        </div>
+        <div class="form-field">
+          <label>Se escribe correcto así</label>
+          <input type="text" id="fTypoCorrecta" placeholder='Ej: NO LEE TARJETAS'>
+        </div>
+      </div>
+      <div class="row">
+        <button onclick="agregarTypoManual()"><i class="bi bi-plus-lg"></i> Agregar corrección</button>
+      </div>
+      <div class="tablewrap" style="margin-top:12px;">
+        <table>
+          <thead><tr><th style="width:38%">Incorrecto</th><th style="width:6%"></th><th style="width:38%">Correcto</th><th style="width:10%"></th></tr></thead>
+          <tbody id="typoBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel" id="importHintPanel" style="display:none;">
+      <span id="importHint"></span>
+    </div>
+
+    <div class="panel form-panel" id="refFormPanel">
+      <div class="form-title" id="refFormTitle">Agregar nueva fila</div>
+      <div class="form-grid">
+        <div class="form-field">
+          <label>Generación</label>
+          <input type="text" id="fGeneracion" list="listaFamilias" placeholder="MRAII, MRA, LSR, PDV..." oninput="mostrarOpcionesExistentes()">
+          <datalist id="listaFamilias"></datalist>
+        </div>
+        <div class="form-field" style="flex:1.6;">
+          <label>Novedad</label>
+          <input type="text" id="fNovedad" placeholder="Ej: MONEDERO DESACTIVADO" oninput="mostrarOpcionesExistentes()">
+        </div>
+        <div class="form-field" style="flex:2.2;">
+          <label>Denominación de conjunto</label>
+          <input type="text" id="fConjuntoNombre" list="listaConjuntos" placeholder="Ej: Lector de monedas NRA G-13 MRA EGT" oninput="autocompletarCodigo()">
+          <datalist id="listaConjuntos"></datalist>
+        </div>
+        <div class="form-field">
+          <label>Código</label>
+          <input type="text" id="fConjuntoCodigo" placeholder="Ej: 1001996">
+        </div>
+      </div>
+      <div id="refFormWarning" class="form-warning" style="display:none;"></div>
+      <div id="refExistingHint" class="form-existing-hint" style="display:none;"></div>
+      <div class="row" style="margin-top:12px;">
+        <button onclick="guardarDesdeFormulario()" id="btnGuardarRef"><i class="bi bi-check2-square"></i> Guardar</button>
+        <button class="secondary" id="btnCancelarRef" style="display:none;" onclick="cancelarEdicionRef()">Cancelar</button>
+        <span class="save-hint" id="saveHint"></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="filterbar">
+        <input type="text" id="filtroRef" placeholder="Buscar por novedad, conjunto o código..." oninput="renderReferencia()">
+        <select id="filtroFamilia" onchange="renderReferencia()">
+          <option value="">Todas las generaciones</option>
+        </select>
+        <span class="save-hint" id="refCountHint" style="margin-left:auto;"></span>
+      </div>
+      <div class="tablewrap">
+        <table id="tablaReferencia">
+          <thead>
+            <tr>
+              <th class="sortable" style="width:12%" onclick="ordenarRef('familia')">Generación<span class="sort-arrow" id="arrow-familia"></span></th>
+              <th class="sortable" style="width:24%" onclick="ordenarRef('novedad')">Novedad<span class="sort-arrow" id="arrow-novedad"></span></th>
+              <th class="sortable" style="width:29%" onclick="ordenarRef('conjunto_nombre')">Denominación de conjunto<span class="sort-arrow" id="arrow-conjunto_nombre"></span></th>
+              <th class="sortable" style="width:11%" onclick="ordenarRef('conjunto_codigo')">Código<span class="sort-arrow" id="arrow-conjunto_codigo"></span></th>
+              <th style="width:24%">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="refBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= INFORME ================= -->
+  <div class="view" id="view-informe">
+    <div class="panel">
+      <p style="margin-top:0;font-size:13px;color:var(--muted)">
+        Resumen de todos los avisos que marcaste como <b>corregidos</b> — para armar tu reporte de avisos mal diligenciados.
+        Se guardan en la nube y <b>se conservan 3 meses</b>; los más antiguos se borran automáticamente.
+        Si quieres un archivo permanente, usa <b>Exportar informe (Excel)</b> antes de que se cumpla el plazo.
+      </p>
+      <div class="row">
+        <button class="secondary" onclick="exportarInformeCSV()"><i class="bi bi-file-earmark-spreadsheet"></i> Exportar informe (Excel)</button>
+        <button class="secondary" id="btnLimpiarInforme" onclick="pedirConfirmLimpiarInforme()"><i class="bi bi-trash3"></i> Limpiar informe</button>
+      </div>
+    </div>
+
+    <div class="panel" id="informeResumen"></div>
+
+    <div class="panel" id="responsablePanel" style="display:none;">
+      <div class="form-title" style="margin-bottom:10px;"><i class="bi bi-people-fill"></i> Por responsable (del Excel actualmente cargado)</div>
+      <div id="responsableContenido"></div>
+    </div>
+
+    <div class="panel">
+      <div class="form-title" style="margin-bottom:10px;"><i class="bi bi-people-fill"></i> Responsables con más avisos con error (del Excel actualmente cargado)</div>
+      <canvas id="graficoResponsables" height="140"></canvas>
+    </div>
+
+    <div class="panel" id="historialPanel"></div>
+
+    <div class="panel">
+      <div class="row" style="margin-top:0; gap: 24px; align-items:flex-start;">
+        <div style="flex:1; min-width:280px;">
+          <div class="form-title" style="margin-bottom:10px;">Por tipo de falla</div>
+          <canvas id="graficoTipos" height="220"></canvas>
+        </div>
+        <div style="flex:1; min-width:280px;">
+          <div class="form-title" style="margin-bottom:10px;">Top novedades (causas)</div>
+          <canvas id="graficoNovedades" height="220"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="overflow:auto;">
+      <div class="filterbar">
+        <input type="text" id="filtroInforme" placeholder="Buscar por notificación, orden, novedad o falla..." oninput="renderInforme()">
+      </div>
+      <div id="informeTabla"></div>
+    </div>
+  </div>
+
+<script>
+  // =====================================================================
+  //  ALMACENAMIENTO COMPARTIDO (Supabase)
+  //  Pega aquí los datos de tu proyecto: Supabase > Project Settings > API
+  //  Usa la clave "anon" / "publishable" (NUNCA la service_role).
+  // =====================================================================
+  const SUPABASE_URL = 'https://enxmqxdzulrpsjxiogcv.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVueG1xeGR6dWxycHNqeGlvZ2N2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI2OTgyNTgsImV4cCI6MjEwODI3NDI1OH0.K_K68uNt7kpDXwziY0yGskqKRtjwKsRZtDMC5WdzP5Y';
+
+  const SUPABASE_CONFIGURADO = !/TU-PROYECTO|TU_ANON_KEY/.test(SUPABASE_URL + SUPABASE_ANON_KEY);
+
+  if (!window.storage && SUPABASE_CONFIGURADO) {
+    const ENDPOINT = SUPABASE_URL.replace(/\/+$/, '').replace(/\/rest\/v1$/, '') + '/rest/v1/app_storage';
+    const HEADERS = {
+      'apikey': SUPABASE_ANON_KEY,
+      'Content-Type': 'application/json'
+    };
+    // Las claves antiguas "anon" (empiezan por eyJ) se envían también como Bearer;
+    // las nuevas "sb_publishable_..." solo van en apikey.
+    if (/^eyJ/.test(SUPABASE_ANON_KEY)) HEADERS['Authorization'] = 'Bearer ' + SUPABASE_ANON_KEY;
+    const TODAS_LAS_CLAVES = ['tabla_referencia', 'diccionario_typos', 'referencia_estatus',
+                              'referencia_motivo', 'historial_validaciones', 'corregidos_avisos'];
+    let cache = null;      // { clave: valor } tal como está en la nube
+    let cargando = null;   // promesa de la primera carga (evita 6 peticiones en paralelo)
+    let soloLectura = false;
+
+    function avisoConexion(mostrar) {
+      let el = document.getElementById('avisoNube');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'avisoNube';
+        el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;padding:8px 14px;text-align:center;' +
+          'font-size:13px;font-weight:600;background:#e5484d;color:#fff;display:none;';
+        el.textContent = 'Sin conexión con la base de datos: los cambios NO se están guardando. ' +
+          'Revisa tu internet y recarga la página (F5).';
+        (document.body || document.documentElement).appendChild(el);
+      }
+      el.style.display = mostrar ? 'block' : 'none';
+    }
+
+    async function traerTodo() {
+      const r = await fetch(ENDPOINT + '?select=key,value', { headers: HEADERS });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const filas = await r.json();
+      const c = {};
+      filas.forEach(f => { c[f.key] = f.value; });
+      return c;
+    }
+
+    function asegurarCarga() {
+      if (cache) return Promise.resolve();
+      if (!cargando) {
+        cargando = traerTodo()
+          .then(c => { cache = c; soloLectura = false; avisoConexion(false); })
+          .catch(e => {
+            cargando = null;
+            soloLectura = true;   // IMPORTANTE: si no pudimos leer, no dejamos escribir
+            avisoConexion(true);  // (así un fallo de red nunca pisa los datos reales con el SEED)
+            throw e;
+          });
+      }
+      return cargando;
+    }
+
+    window.storage = {
+      async get(key) {
+        await asegurarCarga();
+        if (!(key in cache)) throw new Error('No existe la clave: ' + key);
+        return { key, value: JSON.stringify(cache[key]) };
+      },
+      async set(key, value) {
+        if (soloLectura || !cache) throw new Error('Sin conexión: no se guardó');
+        const r = await fetch(ENDPOINT + '?on_conflict=key', {
+          method: 'POST',
+          headers: { ...HEADERS, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+          body: JSON.stringify([{ key, value: JSON.parse(value) }])
+        });
+        if (!r.ok) {
+          avisoConexion(true);
+          throw new Error('No se pudo guardar (HTTP ' + r.status + ')');
+        }
+        avisoConexion(false);
+        cache[key] = JSON.parse(value);
+        return { key, value };
+      },
+      async delete(key) { throw new Error('Borrado no permitido'); },
+      async list(prefix) {
+        await asegurarCarga();
+        return { keys: Object.keys(cache).filter(k => !prefix || k.startsWith(prefix)), prefix };
+      },
+      // Vuelve a leer la nube y devuelve las claves que cambiaron (otra persona editó algo)
+      async refresh() {
+        const nuevo = await traerTodo();
+        const eraNulo = !cache || soloLectura;
+        const cambiadas = TODAS_LAS_CLAVES.filter(k =>
+          eraNulo || JSON.stringify(nuevo[k]) !== JSON.stringify(cache[k]));
+        cache = nuevo; soloLectura = false; avisoConexion(false);
+        return cambiadas;
+      }
+    };
+  }
+
+  // Sin configurar Supabase (o abierto en local): usa el navegador como antes.
+  if (!window.storage) {
+    if (!SUPABASE_CONFIGURADO) console.warn('Supabase sin configurar: se guarda solo en este navegador (localStorage).');
+    window.storage = {
+      async get(key) {
+        const v = localStorage.getItem(key);
+        if (v === null) throw new Error('No existe la clave: ' + key);
+        return { key, value: v };
+      },
+      async set(key, value) { localStorage.setItem(key, value); return { key, value }; },
+      async delete(key) { localStorage.removeItem(key); return { key, deleted: true }; },
+      async list(prefix) {
+        return { keys: Object.keys(localStorage).filter(k => !prefix || k.startsWith(prefix)), prefix };
+      },
+      async refresh() { return []; }
+    };
+  }
+
+  const ETIQUETAS_TIPO = {
+    orden: 'Sin Orden',
+    textobreve: 'Texto breve errado',
+    redaccion: 'Texto breve errado',
+    conjunto: 'Conjunto errado',
+    ptotrabajo: 'Pto.trabajo errado',
+    status: 'Sin notificar',
+    nliq: 'Sin Norma de Liquidación',
+    statususuario: 'Status de usuario errado',
+    estinst: 'Est.inst.tras medida errado',
+    motivo: 'Clasificación de motivo errada',
+    duracionparada: 'Duración de parada excedida'
+  };
+  // ---------- Tabs ----------
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+      document.querySelectorAll('.view').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      document.getElementById('view-' + t.dataset.tab).classList.add('active');
+      if (t.dataset.tab === 'referencia') renderReferencia();
+      if (t.dataset.tab === 'informe') { renderInforme(); renderHistorial(); }
+    });
+  });
+
+  // ---------- Seed inicial (sugerencia extraída de tu historial, editable) ----------
+  const SEED = [{"familia": "MRAII", "novedad": "BILLETERO DESACTIVADO", "conjunto_nombre": "Lector billetes MEI SC Advance MRA EGT", "conjunto_codigo": "1002000", "id": "r0"}, {"familia": "MRAII", "novedad": "BILLETERO EN FALLO", "conjunto_nombre": "Lector billetes MEI SC Advance MRA EGT", "conjunto_codigo": "1002000", "id": "r1"}, {"familia": "MRA", "novedad": "BILLETERO LLENO", "conjunto_nombre": "Box billetes SCNL8327R 1200 MRA", "conjunto_codigo": "2027610", "id": "r2"}, {"familia": "MRA", "novedad": "BILLETERO NO DEVUELVE", "conjunto_nombre": "Dispensador billetes GRG 8240 MRA SDA", "conjunto_codigo": "1010408", "id": "r3"}, {"familia": "MRA", "novedad": "CAM ROSTRO SIN VIDEO", "conjunto_nombre": "NVR DS-7108NI-Q1/8P HIKVISION MRA SDA", "conjunto_codigo": "1010378", "id": "r4"}, {"familia": "MRA", "novedad": "CPU APAGADA", "conjunto_nombre": "CPU  IPC6800 MRA SDA", "conjunto_codigo": "2040537", "id": "r5"}, {"familia": "MRA", "novedad": "DUCTO ATASCADO", "conjunto_nombre": "Aceptador monedas EAGLE MRA SDA", "conjunto_codigo": "1010398", "id": "r6"}, {"familia": "MRA", "novedad": "FALLO EN DEVOLUCION", "conjunto_nombre": "Dispensador billetes GRG 8240 MRA SDA", "conjunto_codigo": "1010408", "id": "r7"}, {"familia": "MRA", "novedad": "FALLO EN DEVOLUCIÓN", "conjunto_nombre": "Dispensador billetes GRG 8240 MRA SDA", "conjunto_codigo": "1010408", "id": "r8"}, {"familia": "MRA", "novedad": "FUERA DE LINEA", "conjunto_nombre": "Base de datos Cívica", "conjunto_codigo": "5001878", "id": "r9"}, {"familia": "MRA", "novedad": "IMPRESORA ATASCADA", "conjunto_nombre": "Impresora CUSTOM TG2480H MRA SDA", "conjunto_codigo": "1010407", "id": "r10"}, {"familia": "MRA", "novedad": "LECTORA DESALINEADA", "conjunto_nombre": "ACR1281U-C1 MRA SDA", "conjunto_codigo": "1010455", "id": "r11"}, {"familia": "MRA", "novedad": "MOENDERO DESACTIVADO", "conjunto_nombre": "Aceptador monedas EAGLE MRA SDA", "conjunto_codigo": "1010398", "id": "r12"}, {"familia": "MRA", "novedad": "MONEDERO ATASCADO", "conjunto_nombre": "Aceptador monedas EAGLE MRA SDA", "conjunto_codigo": "1010398", "id": "r13"}, {"familia": "MRA", "novedad": "MONEDERO BLOQUEADO", "conjunto_nombre": "Aceptador monedas EAGLE MRA SDA", "conjunto_codigo": "1010398", "id": "r14"}, {"familia": "MRA", "novedad": "MONEDERO DESABILITADO", "conjunto_nombre": "Aceptador monedas EAGLE MRA SDA", "conjunto_codigo": "1010398", "id": "r15"}, {"familia": "MRA", "novedad": "MONEDERO DESACIVADO", "conjunto_nombre": "Aceptador monedas EAGLE MRA SDA", "conjunto_codigo": "1010398", "id": "r16"}, {"familia": "MRA", "novedad": "MONEDERO DESACTIVADO", "conjunto_nombre": "Aceptador monedas EAGLE MRA SDA", "conjunto_codigo": "1010398", "id": "r17"}, {"familia": "MRA", "novedad": "MONEDERO DESAJUSTADO", "conjunto_nombre": "Aceptador monedas EAGLE MRA SDA", "conjunto_codigo": "1010398", "id": "r18"}, {"familia": "MRA", "novedad": "MONEDERO EN FALLO", "conjunto_nombre": "Aceptador monedas EAGLE MRA SDA", "conjunto_codigo": "1010398", "id": "r19"}, {"familia": "MRA", "novedad": "NO DEVUELVE BILLETES", "conjunto_nombre": "Dispensador billetes GRG 8240 MRA SDA", "conjunto_codigo": "1010408", "id": "r20"}, {"familia": "MRA", "novedad": "NO DEVUELVE MONEDAS", "conjunto_nombre": "Hoppers de monedas 50 MRA SDA", "conjunto_codigo": "1010496", "id": "r21"}, {"familia": "MRA", "novedad": "NO EMITE TARJETAS", "conjunto_nombre": "Dispensador tarjetas CRT-591M MRA SDA", "conjunto_codigo": "1010399", "id": "r22"}, {"familia": "MRA", "novedad": "NO IMPRIME", "conjunto_nombre": "Impresora CUSTOM TG2480H MRA SDA", "conjunto_codigo": "1010407", "id": "r23"}, {"familia": "MRAII", "novedad": "NO LEE BILLETES", "conjunto_nombre": "Lector billetes MEI SC Advance MRA EGT", "conjunto_codigo": "1002000", "id": "r24"}, {"familia": "MRA", "novedad": "NO LEE MONEDAS", "conjunto_nombre": "Aceptador monedas EAGLE MRA SDA", "conjunto_codigo": "1010398", "id": "r25"}, {"familia": "MRA", "novedad": "NO LEE TARJETA", "conjunto_nombre": "ACR1281U-C1 MRA SDA", "conjunto_codigo": "1010455", "id": "r26"}, {"familia": "MRA", "novedad": "NO LEE TARJETAS", "conjunto_nombre": "ACR1281U-C1 MRA SDA", "conjunto_codigo": "1010455", "id": "r27"}, {"familia": "MRAII", "novedad": "NO RECIBE BILLETES", "conjunto_nombre": "Lector billetes MEI SC Advance MRA EGT", "conjunto_codigo": "1002000", "id": "r28"}, {"familia": "MRA", "novedad": "NO RECIBE MONEDAS", "conjunto_nombre": "Aceptador monedas EAGLE MRA SDA", "conjunto_codigo": "1010398", "id": "r29"}, {"familia": "MRA", "novedad": "NVR SIN ACCESO REMOTO", "conjunto_nombre": "NVR DS-7108NI-Q1/8P HIKVISION MRA SDA", "conjunto_codigo": "1010378", "id": "r30"}, {"familia": "MRA", "novedad": "PANTALLA AVERIADA", "conjunto_nombre": "Pantalla tactil 15 pulgadas MRA SDA", "conjunto_codigo": "1010394", "id": "r31"}, {"familia": "MRA", "novedad": "PANTALLA DEFECTUOSA", "conjunto_nombre": "Pantalla tactil 15 pulgadas MRA SDA", "conjunto_codigo": "1010394", "id": "r32"}, {"familia": "MRA", "novedad": "PUERTA ABIERTA", "conjunto_nombre": "PLC Siemens LOGO 8 MRA SDA", "conjunto_codigo": "1010419", "id": "r33"}, {"familia": "MRA", "novedad": "RECARGA NO EXITOSA", "conjunto_nombre": "App recargas Cívica", "conjunto_codigo": "5001875", "id": "r34"}, {"familia": "MRA", "novedad": "SIN ACCESO REMOTO", "conjunto_nombre": "CPU  IPC6800 MRA SDA", "conjunto_codigo": "2040537", "id": "r35"}, {"familia": "MRA", "novedad": "SIN CAMARA DE BILLETES", "conjunto_nombre": "Camara de red DS-2CD6425G1-30 MRA SDA", "conjunto_codigo": "2040538", "id": "r36"}, {"familia": "MRA", "novedad": "SIN CAMARA DE ROSTRO", "conjunto_nombre": "Camara de red DS-2CD6425G1-30 MRA SDA", "conjunto_codigo": "2040538", "id": "r37"}, {"familia": "MRA", "novedad": "SIN TACTIL", "conjunto_nombre": "Pantalla tactil 22 pulgadas MRA SDA", "conjunto_codigo": "1010379", "id": "r38"}, {"familia": "MRAII", "novedad": "BILLETERO DESACTIVADO", "conjunto_nombre": "Lector billetes MEI SC Advance MRA EGT", "conjunto_codigo": "1002000", "id": "r39"}, {"familia": "MRAII", "novedad": "BILLETERO EN FALLO", "conjunto_nombre": "Lector billetes MEI SC Advance MRA", "conjunto_codigo": "1000270", "id": "r40"}, {"familia": "MRAII", "novedad": "BILLETERO NO DEVUELVE", "conjunto_nombre": "Billetero dispens Fujitsu F56 MRA EGT", "conjunto_codigo": "1002020", "id": "r41"}, {"familia": "MRAII", "novedad": "CAM BILLETES SIN VIDEO", "conjunto_nombre": "Pinhole / camara HIKVISION MRA EGT", "conjunto_codigo": "1009584", "id": "r42"}, {"familia": "MRAII", "novedad": "CAM ROSTRO SIN VIDEO", "conjunto_nombre": "Pinhole / camara HIKVISION MRA EGT", "conjunto_codigo": "1009584", "id": "r43"}, {"familia": "MRAII", "novedad": "CAMARA DESALINEADA", "conjunto_nombre": "Pinhole / camara HIKVISION MRA EGT", "conjunto_codigo": "1009584", "id": "r44"}, {"familia": "MRAII", "novedad": "CAMBIO DE CHAPA", "conjunto_nombre": "Cerradura giratoria puerta ppal MRA EGT", "conjunto_codigo": "1002732", "id": "r45"}, {"familia": "MRAII", "novedad": "CPU APAGADA", "conjunto_nombre": "Cpu KMDA-3230 MRA EGT", "conjunto_codigo": "1002007", "id": "r46"}, {"familia": "MRAII", "novedad": "CPU SE REINICIA", "conjunto_nombre": "Cpu KMDA-3230 MRA EGT", "conjunto_codigo": "1002007", "id": "r47"}, {"familia": "MRAII", "novedad": "FALLO EN DEVOLUCION", "conjunto_nombre": "Billetero dispens Fujitsu F56 MRA EGT", "conjunto_codigo": "1002020", "id": "r48"}, {"familia": "MRAII", "novedad": "FUERA DE LINEA", "conjunto_nombre": "Base de datos Cívica", "conjunto_codigo": "5001878", "id": "r49"}, {"familia": "MRAII", "novedad": "LED MONEDERO APAGADO", "conjunto_nombre": "Lector de monedas NRA G-13 MRA EGT", "conjunto_codigo": "1001996", "id": "r50"}, {"familia": "MRAII", "novedad": "MONEDERO DESACTIVADO", "conjunto_nombre": "Lector de monedas NRA G-13 MRA EGT", "conjunto_codigo": "1001996", "id": "r51"}, {"familia": "MRAII", "novedad": "NO DEVUELVE", "conjunto_nombre": "Billetero dispens Fujitsu F56 MRA EGT", "conjunto_codigo": "1002020", "id": "r52"}, {"familia": "MRAII", "novedad": "NO DEVUELVE BILLETES", "conjunto_nombre": "Billetero dispens Fujitsu F56 MRA EGT", "conjunto_codigo": "1002020", "id": "r53"}, {"familia": "MRAII", "novedad": "NO DEVUELVE MONEDAS", "conjunto_nombre": "Conj. hopper Currenza NRI MRA EGT", "conjunto_codigo": "1002019", "id": "r54"}, {"familia": "MRAII", "novedad": "NO EMITE TARJETAS", "conjunto_nombre": "Dispensador tarjeta Creator-531 MRA EGT", "conjunto_codigo": "1002021", "id": "r55"}, {"familia": "MRAII", "novedad": "NO IMPRIME", "conjunto_nombre": "Impresora termica Custom vkp80ii MRA EGT", "conjunto_codigo": "1002006", "id": "r56"}, {"familia": "MRAII", "novedad": "NO LEE BILLETES", "conjunto_nombre": "Lector billetes MEI SC Advance MRA EGT", "conjunto_codigo": "1002000", "id": "r57"}, {"familia": "MRAII", "novedad": "NO LEE TARJETAS", "conjunto_nombre": "ACR 1281U-C1 conexion USB", "conjunto_codigo": "1008861", "id": "r58"}, {"familia": "MRAII", "novedad": "NO REALIZA DEVOLUCIÓN", "conjunto_nombre": "Billetero dispens Fujitsu F56 MRA EGT", "conjunto_codigo": "1002020", "id": "r59"}, {"familia": "MRAII", "novedad": "NO RECIBE BILLETES", "conjunto_nombre": "Lector billetes MEI SC Advance MRA EGT", "conjunto_codigo": "1002000", "id": "r60"}, {"familia": "MRAII", "novedad": "PUERTA NO ABRE", "conjunto_nombre": "Cerradura giratoria puerta ppal MRA EGT", "conjunto_codigo": "1002732", "id": "r61"}, {"familia": "MRAII", "novedad": "PUERTA PP NO ABRE", "conjunto_nombre": "Arduino mega 2560 REV-3 MRA EGT", "conjunto_codigo": "1002729", "id": "r62"}, {"familia": "MRAII", "novedad": "RECARGA NO EXITOSA", "conjunto_nombre": "App recargas Cívica", "conjunto_codigo": "5001875", "id": "r63"}, {"familia": "MRAII", "novedad": "SHUTTER BLOQUEADO", "conjunto_nombre": "Shutter billetero FUJITSU F56 MRA EGT", "conjunto_codigo": "1002981", "id": "r64"}, {"familia": "MRAII", "novedad": "SHUTTER NO CIERRA", "conjunto_nombre": "Shutter billetero FUJITSU F56 MRA EGT", "conjunto_codigo": "1002981", "id": "r65"}, {"familia": "MRAII", "novedad": "SIN ACCESO REMOTO", "conjunto_nombre": "CPU KMDA-5920-S002 MRA EGT", "conjunto_codigo": "1009577", "id": "r66"}, {"familia": "MRAII", "novedad": "SIN CAMARA DE ROSTRO", "conjunto_nombre": "Pinhole / camara HIKVISION MRA EGT", "conjunto_codigo": "1009584", "id": "r67"}, {"familia": "MRAII", "novedad": "TARJETA ATASCADA", "conjunto_nombre": "ACR 1281U-C1 conexion USB", "conjunto_codigo": "1008861", "id": "r68"}, {"familia": "MRAII", "novedad": "UPS ALARMADA", "conjunto_nombre": "Ups APC BE850M2-LM MRA EGT", "conjunto_codigo": "1002761", "id": "r69"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "(VER1010141)MOD ZFE C119 RELE SDA 110V/3", "conjunto_codigo": "1003591", "id": "r70"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "ACEPTADOR MONEDAS EAGLE MRA SDA", "conjunto_codigo": "1010398", "id": "r71"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "ACR1281U-C1 MRA SDA", "conjunto_codigo": "1010455", "id": "r72"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "ALCANCIA DE MONEDAS MRA SDA", "conjunto_codigo": "1010479", "id": "r73"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "ASPIRADOR EQUIPO VESDA/SCI TAL", "conjunto_codigo": "2033614", "id": "r74"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "BREAKER CNC YCB6H-63 MRA SDA", "conjunto_codigo": "1010425", "id": "r75"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "CAMARA DE RED DS-2CD6425G1-XX MRA SDA", "conjunto_codigo": "2040538", "id": "r76"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "CASSETES BILLETES GRG MRA SDA", "conjunto_codigo": "1010409", "id": "r77"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "CERRADURA ELECTROMAGNETICA 12V MRA SDA", "conjunto_codigo": "1010422", "id": "r78"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "CPU IPC6800 MRA SDA", "conjunto_codigo": "2040537", "id": "r79"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "DETECTOR VESDA VESDA VLC600 /SCI PCC", "conjunto_codigo": "2019011", "id": "r80"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "DETECTOR VESDA VLP 012 /SCI PCC", "conjunto_codigo": "2019254", "id": "r81"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "DISPENSADOR BILLETES GRG 8240 MRA SDA", "conjunto_codigo": "1010408", "id": "r82"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "DISPENSADOR TARJETAS CRT-591M MRA SDA", "conjunto_codigo": "1010399", "id": "r83"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "DISTRIBUIDOR P/ESMERILADORA HY10.RSDA", "conjunto_codigo": "1004645", "id": "r84"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "FILTRO CARTRIGE EQUIPO VESDA/SCI TAL", "conjunto_codigo": "2033615", "id": "r85"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "FUENTE DE PODER LRS-100-24V MRA SDA", "conjunto_codigo": "1010426", "id": "r86"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "FUENTE DE PODER RSP-150-12V MRA SDA", "conjunto_codigo": "1010429", "id": "r87"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "FUENTE DE PODER RSP-200-24V MRA SDA", "conjunto_codigo": "1010428", "id": "r88"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "HOPPERS DE MONEDAS 100 MRA SDA", "conjunto_codigo": "1010497", "id": "r89"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "HOPPERS DE MONEDAS 200 MRA SDA", "conjunto_codigo": "1010511", "id": "r90"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "HOPPERS DE MONEDAS 50 MRA SDA", "conjunto_codigo": "1010496", "id": "r91"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "HOPPERS DE MONEDAS 500 MRA SDA", "conjunto_codigo": "1010512", "id": "r92"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "IMPRESORA CUSTOM TG2480H MRA SDA", "conjunto_codigo": "1010407", "id": "r93"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "LASER FOCUS EQUIPO VESDA/SCI TAL", "conjunto_codigo": "1014193", "id": "r94"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "MODULO DE CONTROL IO MRA SDA", "conjunto_codigo": "1010421", "id": "r95"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "NVR DS-7108NI-Q1/8P HIKVISION MRA SDA", "conjunto_codigo": "1010378", "id": "r96"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "PANTALLA TACTIL 15 PULGADAS MRA SDA", "conjunto_codigo": "1010394", "id": "r97"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "PANTALLA TACTIL 22 PULGADAS MRA SDA", "conjunto_codigo": "1010379", "id": "r98"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "PLC SIEMENS LOGO 8 MRA SDA", "conjunto_codigo": "1010419", "id": "r99"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "RELAY DELIXI CDZ9-54PL MRA SDA", "conjunto_codigo": "1010424", "id": "r100"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "SHUTTER GRG WST-002A MRA SDA", "conjunto_codigo": "1010412", "id": "r101"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "TARJETA INTERFACE EQUIPO VESDA/SCI TAL", "conjunto_codigo": "1014192", "id": "r102"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "UPS BV650 VA, 120V MRA SDA", "conjunto_codigo": "1010427", "id": "r103"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "UPS FORZA DC-140 USB MRA SDA", "conjunto_codigo": "1010423", "id": "r104"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "VALVULA HY-10-RSDA P/BATEAD PLASSER", "conjunto_codigo": "1004795", "id": "r105"}, {"familia": "MRA", "novedad": "", "conjunto_nombre": "BOX BILLETES SCNL8327R 1200 MRA", "conjunto_codigo": "2027610", "id": "r106"}, {"familia": "MRAII", "novedad": "CPU APAGADA", "conjunto_nombre": "CPU KMDA-5920-S002 MRA EGT", "conjunto_codigo": "1009577", "id": "r107"}];
+  const SEED_ESTATUS = [{"novedad": "ACRILICO CAIDO", "t4": false, "status": "A01", "id": "u0"}, {"novedad": "ATASCO DE MONEDAS", "t4": false, "status": "A01", "id": "u1"}, {"novedad": "BILLETERO DESACTIVADO", "t4": false, "status": "A01", "id": "u2"}, {"novedad": "BILLETERO DESACTIVADO", "t4": true, "status": "A00", "id": "u3"}, {"novedad": "BILLETERO EN FALLO", "t4": false, "status": "A01", "id": "u4"}, {"novedad": "BILLETERO NO DEVUELVE", "t4": false, "status": "A01", "id": "u5"}, {"novedad": "BISAGRA PTA AVERIADA", "t4": false, "status": "A02", "id": "u6"}, {"novedad": "CAM BILLETES SIN VIDEO", "t4": false, "status": "A01", "id": "u7"}, {"novedad": "CAM ROSTRO SIN VIDEO", "t4": false, "status": "A01", "id": "u8"}, {"novedad": "CAM ROSTRO SIN VIDEO", "t4": true, "status": "A01", "id": "u9"}, {"novedad": "CAMBIO DE ACRILICO", "t4": false, "status": "A01", "id": "u10"}, {"novedad": "CAMBIO DE CAJA", "t4": true, "status": "A02", "id": "u11"}, {"novedad": "CHAPA BLOQUEADA", "t4": false, "status": "A02", "id": "u12"}, {"novedad": "CPU APAGADA", "t4": false, "status": "A00", "id": "u13"}, {"novedad": "DUCTO ATASCADO", "t4": false, "status": "A01", "id": "u14"}, {"novedad": "ERROR EN DEVOLUCION", "t4": false, "status": "A01", "id": "u15"}, {"novedad": "ERROR SISTEMA OPERATIVO", "t4": false, "status": "A00", "id": "u16"}, {"novedad": "EXTRACTOR CON RUIDO", "t4": false, "status": "A01", "id": "u17"}, {"novedad": "FALLO EN DEVOLUCION", "t4": false, "status": "A01", "id": "u18"}, {"novedad": "FALLO EN DEVOLUCIÓN", "t4": false, "status": "A01", "id": "u19"}, {"novedad": "FUERA DE LINEA", "t4": false, "status": "A01", "id": "u20"}, {"novedad": "INTERFONIA SIN TONO", "t4": false, "status": "A01", "id": "u21"}, {"novedad": "LECTORA DESALINEADA", "t4": false, "status": "A01", "id": "u22"}, {"novedad": "MONEDERO ATASCADO", "t4": false, "status": "A01", "id": "u23"}, {"novedad": "MONEDERO BLOQUEADO", "t4": false, "status": "A01", "id": "u24"}, {"novedad": "MONEDERO DESACTIVADO", "t4": false, "status": "A01", "id": "u25"}, {"novedad": "MONEDERO DESACTIVO", "t4": false, "status": "A01", "id": "u26"}, {"novedad": "NO DEVUELVE", "t4": false, "status": "A01", "id": "u27"}, {"novedad": "NO DEVUELVE BILLETES", "t4": false, "status": "A01", "id": "u28"}, {"novedad": "NO DEVUELVE MONEDAS", "t4": false, "status": "A01", "id": "u29"}, {"novedad": "NO EMITE TARJETA EVENTUAL", "t4": false, "status": "A01", "id": "u30"}, {"novedad": "NO EMITE TARJETAS", "t4": false, "status": "A01", "id": "u31"}, {"novedad": "NO IMPRIME", "t4": false, "status": "A01", "id": "u32"}, {"novedad": "NO IMPRIME", "t4": true, "status": "A01", "id": "u33"}, {"novedad": "NO LEE BILLETES", "t4": false, "status": "A01", "id": "u34"}, {"novedad": "NO LEE BILLETES", "t4": true, "status": "A00", "id": "u35"}, {"novedad": "NO LEE TARJETAS", "t4": false, "status": "A00", "id": "u36"}, {"novedad": "NO LEE TARJETAS", "t4": true, "status": "A00", "id": "u37"}, {"novedad": "NO RECIBE BILLETES", "t4": false, "status": "A01", "id": "u38"}, {"novedad": "NO RECIBE BILLETES", "t4": true, "status": "A00", "id": "u39"}, {"novedad": "NO RECIBE MONEDAS", "t4": false, "status": "A02", "id": "u40"}, {"novedad": "PANTALLA AVERIADA", "t4": false, "status": "A00", "id": "u41"}, {"novedad": "PANTALLA DEFECTUOSA", "t4": true, "status": "A01", "id": "u42"}, {"novedad": "PANTALLA SIN TACTIL", "t4": false, "status": "A00", "id": "u43"}, {"novedad": "PUERTA ABIERTA", "t4": false, "status": "A00", "id": "u44"}, {"novedad": "PUERTA ABIERTA", "t4": true, "status": "A00", "id": "u45"}, {"novedad": "PUERTA NO ABRE", "t4": false, "status": "A01", "id": "u46"}, {"novedad": "PUERTA PINCIPAL ABIERT", "t4": false, "status": "A01", "id": "u47"}, {"novedad": "PUERTA PP NO ABRE", "t4": false, "status": "A00", "id": "u48"}, {"novedad": "PUERTA PPAL NO ABRE", "t4": false, "status": "A01", "id": "u49"}, {"novedad": "PUERTA VALORES ABIERTA", "t4": false, "status": "A00", "id": "u50"}, {"novedad": "RECARGA NO EXITOSA", "t4": false, "status": "A01", "id": "u51"}, {"novedad": "RECARGA NO EXITOSA", "t4": true, "status": "A01", "id": "u52"}, {"novedad": "S.O NO INICIA", "t4": false, "status": "A00", "id": "u53"}, {"novedad": "SHUTTER ABIERTO", "t4": false, "status": "A01", "id": "u54"}, {"novedad": "SHUTTER CON SUCIEDAD", "t4": false, "status": "A01", "id": "u55"}, {"novedad": "SIN ACCESO REMOTO", "t4": false, "status": "A00", "id": "u56"}, {"novedad": "SIN CAMARA DE ROSTRO", "t4": false, "status": "A01", "id": "u57"}, {"novedad": "SIN PROPIEDAD TACTIL", "t4": false, "status": "A00", "id": "u58"}, {"novedad": "TACTIL DESACTIVADO", "t4": false, "status": "A00", "id": "u59"}, {"novedad": "TARJETA ATASCADA", "t4": false, "status": "A00", "id": "u60"}, {"novedad": "TARJETA CIVICA ATASCAD", "t4": false, "status": "A00", "id": "u61"}, {"novedad": "UPS ALARMADA", "t4": false, "status": "A02", "id": "u62"}, {"novedad": "UPS APAGADA", "t4": false, "status": "A00", "id": "u63"}];
+  const SEED_MOTIVO = [{"novedad": "BILLETERO DESACTIVADO", "grupo": "GENERAL1", "problema": "Desactivado", "motivo": "Bloqueado (a)", "causa": "BILLETERO BLOQUEADO", "id": "m0"}, {"novedad": "CAM BILLETES SIN VIDEO", "grupo": "GENERAL1", "problema": "No da imagen/video", "motivo": "Desajustado (a)", "causa": "CONEXIONES DESAJUSTADAS", "id": "m1"}, {"novedad": "CAM ROSTRO SIN VIDEO", "grupo": "GENERAL1", "problema": "No da imagen/video", "motivo": "Desajustado (a)", "causa": "CONEXIONES DESAJUSTADAS", "id": "m2"}, {"novedad": "FUERA DE LINEA", "grupo": "ELECTRÓN", "problema": "Fuera de línea", "motivo": "Software no funciona", "causa": "DESCONEXIÓN POR FALLA DE SOFTWARE", "id": "m3"}, {"novedad": "MONEDERO DESACTIVADO", "grupo": "ELECTRÓN", "problema": "Desactivado", "motivo": "Software no funciona", "causa": "DESCONEXIÓN POR FALLA DE SOFTWARE DE API", "id": "m4"}, {"novedad": "NO DEVUELVE BILLETES", "grupo": "GENERAL1", "problema": "No devuelve", "motivo": "Obstruido (a)", "causa": "BILLETES OBSTRUIDOS", "id": "m5"}, {"novedad": "NO LEE BILLETES", "grupo": "ELÉCTRIC", "problema": "Retenido (a)", "motivo": "Falla de compomente", "causa": "BILLETERO AVERIADO", "id": "m6"}, {"novedad": "NO LEE TARJETAS", "grupo": "ELECTRÓN", "problema": "No lee", "motivo": "Aplicativo no funciona", "causa": "BLOQUEO LOGICO DE LECTORA", "id": "m7"}, {"novedad": "NO RECIBE BILLETES", "grupo": "GENERAL1", "problema": "Desactivado", "motivo": "Bloqueado (a)", "causa": "BILLETERO BLOQUEADO", "id": "m8"}, {"novedad": "NO RECIBE MONEDAS", "grupo": "GENERAL1", "problema": "Desactivado", "motivo": "Bloqueado (a)", "causa": "MONEDERO BLOQUEADO", "id": "m9"}, {"novedad": "PANTALLAZO AZUL", "grupo": "ELECTRÓN", "problema": "No da acceso", "motivo": "Sistema Operativo no funciona", "causa": "S.O CARGA CON PANTALLA AZUL", "id": "m10"}, {"novedad": "RECARGA NO EXITOSA", "grupo": "ELECTRÓN", "problema": "Desactivado", "motivo": "Software no funciona", "causa": "ERROR EN APP RECARGAS CÍVICA", "id": "m11"}, {"novedad": "SIN CAMARA DE ROSTRO", "grupo": "ELÉCTRIC", "problema": "No da acceso", "motivo": "Cable suelto", "causa": "PINHOLE DESCONECTADO", "id": "m12"}];
+
+
+
+  let referencia = [];
+  let diccionarioTypos = [];
+
+  async function cargarReferencia() {
+    try {
+      const r = await window.storage.get('tabla_referencia', false);
+      referencia = JSON.parse(r.value);
+    } catch (e) {
+      referencia = SEED.map(x => ({...x}));
+      await guardarReferencia();
+    }
+    poblarFiltroFamilias();
+    renderReferencia();
+  }
+
+  async function guardarReferencia() {
+    try {
+      await window.storage.set('tabla_referencia', JSON.stringify(referencia), false);
+      const hint = document.getElementById('saveHint');
+      hint.textContent = 'Guardado para todos ✓';
+      setTimeout(() => hint.textContent = '', 1500);
+    } catch (e) {
+      console.error('Error guardando referencia', e);
+    }
+    revalidarSiHayArchivo();
+  }
+
+  async function cargarDiccionarioTypos() {
+    try {
+      const r = await window.storage.get('diccionario_typos', false);
+      diccionarioTypos = JSON.parse(r.value) || [];
+    } catch (e) {
+      diccionarioTypos = [];
+    }
+    renderDiccionarioTypos();
+  }
+
+  async function guardarDiccionarioTypos() {
+    try {
+      await window.storage.set('diccionario_typos', JSON.stringify(diccionarioTypos), false);
+    } catch (e) {
+      console.error('Error guardando diccionario de typos', e);
+    }
+  }
+
+  function agregarTypoManual() {
+    const incorrecta = document.getElementById('fTypoIncorrecta').value.trim().toUpperCase();
+    const correcta = document.getElementById('fTypoCorrecta').value.trim().toUpperCase();
+    if (!incorrecta || !correcta) return;
+    diccionarioTypos = diccionarioTypos.filter(d => normalizarTexto(d.incorrecta) !== normalizarTexto(incorrecta));
+    diccionarioTypos.unshift({ id: 't' + Date.now(), incorrecta, correcta });
+    guardarDiccionarioTypos();
+    document.getElementById('fTypoIncorrecta').value = '';
+    document.getElementById('fTypoCorrecta').value = '';
+    renderDiccionarioTypos();
+  }
+
+  function borrarTypoManual(id) {
+    diccionarioTypos = diccionarioTypos.filter(d => d.id !== id);
+    guardarDiccionarioTypos();
+    renderDiccionarioTypos();
+  }
+
+  function renderDiccionarioTypos() {
+    const tbody = document.getElementById('typoBody');
+    if (!tbody) return;
+    if (!diccionarioTypos.length) {
+      tbody.innerHTML = '<tr><td colspan="3" class="empty">Todavía no agregaste ninguna corrección manual.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = diccionarioTypos.map(d => `
+      <tr>
+        <td><span style="color:var(--bad)">"${escapeHtml(d.incorrecta)}"</span></td>
+        <td><i class="bi bi-arrow-right" style="color:var(--muted)"></i></td>
+        <td><span style="color:var(--ok)">"${escapeHtml(d.correcta)}"</span></td>
+        <td><button class="icon-btn del" onclick="borrarTypoManual('${d.id}')"><i class="bi bi-trash3"></i></button></td>
+      </tr>
+    `).join('');
+  }
+
+  // ---------- Copia de seguridad completa (las 4 tablas de configuracion en un solo archivo) ----------
+  function exportarTodo() {
+    const paquete = {
+      tipo: 'validador-avisos-backup',
+      version: 1,
+      fecha: new Date().toISOString(),
+      referencia,
+      referenciaEstatus,
+      referenciaMotivo,
+      diccionarioTypos
+    };
+    const blob = new Blob([JSON.stringify(paquete, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'backup_validador_avisos_' + new Date().toISOString().slice(0,10) + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  }
+
+  function importarTodo(file) {
+    if (!file) return;
+    const hint = document.getElementById('backupHint');
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const paquete = JSON.parse(e.target.result);
+        if (paquete.tipo !== 'validador-avisos-backup') {
+          hint.textContent = 'Ese archivo no parece ser una copia de seguridad válida.';
+          return;
+        }
+        if (Array.isArray(paquete.referencia)) { referencia = paquete.referencia; await guardarReferencia(); }
+        if (Array.isArray(paquete.referenciaEstatus)) { referenciaEstatus = paquete.referenciaEstatus; await guardarReferenciaEstatus(); }
+        if (Array.isArray(paquete.referenciaMotivo)) { referenciaMotivo = paquete.referenciaMotivo; await guardarReferenciaMotivo(); }
+        if (Array.isArray(paquete.diccionarioTypos)) { diccionarioTypos = paquete.diccionarioTypos; await guardarDiccionarioTypos(); }
+        poblarFiltroFamilias();
+        renderReferencia();
+        renderReferenciaEstatus();
+        renderReferenciaMotivo();
+        renderDiccionarioTypos();
+        hint.textContent = 'Copia restaurada ✓ (' + new Date(paquete.fecha).toLocaleString('es-CO') + ')';
+        revalidarSiHayArchivo();
+      } catch (err) {
+        hint.textContent = 'No se pudo leer el archivo: ' + err.message;
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function exportarReferencia() {
+    const blob = new Blob([JSON.stringify(referencia, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const fecha = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `tabla_referencia_${fecha}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function importarReferencia(file) {
+    if (!file) return;
+    const panel = document.getElementById('importHintPanel');
+    const hint = document.getElementById('importHint');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (!Array.isArray(data)) throw new Error('El archivo no tiene el formato esperado (debe ser una lista).');
+        const validas = data.filter(r => r && typeof r === 'object' && 'familia' in r && 'novedad' in r && 'conjunto_nombre' in r && 'conjunto_codigo' in r);
+        if (!validas.length) throw new Error('No se encontraron filas válidas en el archivo.');
+        validas.forEach((r, i) => { if (!r.id) r.id = 'imp' + Date.now() + '_' + i; });
+        referencia = validas;
+        guardarReferencia();
+        poblarFiltroFamilias();
+        renderReferencia();
+        panel.style.display = '';
+        hint.style.color = 'var(--ok)';
+        hint.textContent = `✓ Tabla importada: ${validas.length} filas cargadas.`;
+      } catch (err) {
+        panel.style.display = '';
+        hint.style.color = 'var(--bad)';
+        hint.textContent = 'Error al importar: ' + err.message;
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function poblarFiltroFamilias() {
+    const sel = document.getElementById('filtroFamilia');
+    const valorPrevio = sel.value;
+    const familias = [...new Set(referencia.map(r => r.familia))].filter(Boolean).sort();
+    sel.innerHTML = '<option value="">Todas las generaciones</option>' +
+      familias.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('');
+    if (familias.includes(valorPrevio)) sel.value = valorPrevio;
+
+    document.getElementById('listaFamilias').innerHTML =
+      familias.map(f => `<option value="${escapeHtml(f)}">`).join('');
+
+    const conjuntos = [...new Set(referencia.map(r => r.conjunto_nombre))].filter(Boolean).sort();
+    document.getElementById('listaConjuntos').innerHTML =
+      conjuntos.map(c => `<option value="${escapeHtml(c)}">`).join('');
+  }
+
+  function autocompletarCodigo() {
+    const nombre = normalizarTexto(document.getElementById('fConjuntoNombre').value);
+    const match = referencia.find(r => normalizarTexto(r.conjunto_nombre) === nombre);
+    if (match) document.getElementById('fConjuntoCodigo').value = match.conjunto_codigo;
+  }
+
+  // ---------- Estado de orden de la tabla ----------
+  let refSortCol = 'familia';
+  let refSortDir = 1;
+
+  function ordenarRef(col) {
+    if (refSortCol === col) refSortDir *= -1;
+    else { refSortCol = col; refSortDir = 1; }
+    renderReferencia();
+  }
+
+  function actualizarFlechasOrden() {
+    ['familia','novedad','conjunto_nombre','conjunto_codigo'].forEach(c => {
+      const el = document.getElementById('arrow-' + c);
+      if (!el) return;
+      el.textContent = (c === refSortCol) ? (refSortDir === 1 ? '▲' : '▼') : '';
+    });
+  }
+
+  function renderReferencia() {
+    const tbody = document.getElementById('refBody');
+    const filtroTexto = document.getElementById('filtroRef').value.trim().toUpperCase();
+    const filtroFam = document.getElementById('filtroFamilia').value;
+
+    let filas = referencia;
+    if (filtroFam) filas = filas.filter(f => f.familia === filtroFam);
+    if (filtroTexto) filas = filas.filter(f =>
+      f.novedad.toUpperCase().includes(filtroTexto) ||
+      f.conjunto_nombre.toUpperCase().includes(filtroTexto) ||
+      f.conjunto_codigo.toUpperCase().includes(filtroTexto)
+    );
+
+    filas = [...filas].sort((a,b) => {
+      const av = (a[refSortCol]||'').toString();
+      const bv = (b[refSortCol]||'').toString();
+      return av.localeCompare(bv) * refSortDir;
+    });
+
+    document.getElementById('refCountHint').textContent = `${filas.length} de ${referencia.length} filas`;
+    actualizarFlechasOrden();
+
+    if (filas.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">Sin resultados. Agregá una fila o cambiá el filtro.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = filas.map(f => `
+      <tr class="ref-row" data-id="${f.id}">
+        <td>${escapeHtml(f.familia)}</td>
+        <td>${escapeHtml(f.novedad)}</td>
+        <td>${escapeHtml(f.conjunto_nombre)}</td>
+        <td>${escapeHtml(f.conjunto_codigo)}</td>
+        <td>
+          <div class="ref-actions" id="acciones-${f.id}">
+            <button class="icon-btn" onclick="cargarFormularioEdicion('${f.id}')" title="Editar"><i class="bi bi-pencil-square"></i> Editar</button>
+            <button class="icon-btn" onclick="duplicarFila('${f.id}')" title="Duplicar"><i class="bi bi-files"></i> Duplicar</button>
+            <button class="icon-btn del" onclick="pedirConfirmBorrado('${f.id}')" title="Eliminar"><i class="bi bi-trash3"></i></button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  function pedirConfirmBorrado(id) {
+    const celda = document.getElementById('acciones-' + id);
+    if (!celda) return;
+    celda.innerHTML = `<div class="confirm-row">
+      ¿Eliminar esta fila?
+      <button class="icon-btn del" onclick="borrarFila('${id}')">Sí, eliminar</button>
+      <button class="icon-btn" onclick="renderReferencia()">Cancelar</button>
+    </div>`;
+  }
+
+  function borrarFila(id) {
+    referencia = referencia.filter(f => f.id !== id);
+    guardarReferencia();
+    if (refEditId === id) cancelarEdicionRef();
+    renderReferencia();
+    poblarFiltroFamilias();
+  }
+
+  // ---------- Formulario fijo (agregar / editar / duplicar) ----------
+  let refEditId = null;
+
+  function limpiarFormularioRef() {
+    document.getElementById('fGeneracion').value = '';
+    document.getElementById('fNovedad').value = '';
+    document.getElementById('fConjuntoNombre').value = '';
+    document.getElementById('fConjuntoCodigo').value = '';
+    document.getElementById('refFormWarning').style.display = 'none';
+  }
+
+  function cargarFormularioEdicion(id) {
+    const fila = referencia.find(f => f.id === id);
+    if (!fila) return;
+    refEditId = id;
+    document.getElementById('fGeneracion').value = fila.familia;
+    document.getElementById('fNovedad').value = fila.novedad;
+    document.getElementById('fConjuntoNombre').value = fila.conjunto_nombre;
+    document.getElementById('fConjuntoCodigo').value = fila.conjunto_codigo;
+    document.getElementById('refFormTitle').textContent = 'Editando fila';
+    document.getElementById('btnCancelarRef').style.display = '';
+    document.getElementById('refFormWarning').style.display = 'none';
+    document.getElementById('refFormPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('fGeneracion').focus();
+  }
+
+  function duplicarFila(id) {
+    const fila = referencia.find(f => f.id === id);
+    if (!fila) return;
+    refEditId = null;
+    document.getElementById('fGeneracion').value = fila.familia;
+    document.getElementById('fNovedad').value = '';
+    document.getElementById('fConjuntoNombre').value = fila.conjunto_nombre;
+    document.getElementById('fConjuntoCodigo').value = fila.conjunto_codigo;
+    document.getElementById('refFormTitle').textContent = 'Nueva fila (duplicada de otra) — completá la novedad';
+    document.getElementById('btnCancelarRef').style.display = '';
+    document.getElementById('refFormWarning').style.display = 'none';
+    document.getElementById('refFormPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('fNovedad').focus();
+  }
+
+  function cancelarEdicionRef() {
+    refEditId = null;
+    limpiarFormularioRef();
+    document.getElementById('refFormTitle').textContent = 'Agregar nueva fila';
+    document.getElementById('btnCancelarRef').style.display = 'none';
+  }
+
+  let refForzarGuardado = false;
+
+  function irAAgregarNovedadValida(idx) {
+    const sug = window.sugerenciasRedaccionActuales[idx];
+    if (!sug) return;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.querySelector('.tab[data-tab="referencia"]').classList.add('active');
+    document.getElementById('view-referencia').classList.add('active');
+
+    const tabla = sug.tabla || 'conjunto';
+    if (tabla === 'conjunto') {
+      cancelarEdicionRef();
+      document.getElementById('fGeneracion').value = sug.familia || '';
+      document.getElementById('fNovedad').value = sug.novedad || '';
+      document.getElementById('fConjuntoNombre').value = sug.conjunto_nombre || '';
+      document.getElementById('fConjuntoCodigo').value = sug.conjunto_codigo || '';
+      document.getElementById('refFormPanel').scrollIntoView({ behavior:'smooth', block:'center' });
+    } else if (tabla === 'estatus') {
+      cancelarEdicionEstatus();
+      document.getElementById('estNovedad').value = sug.novedad || '';
+      document.getElementById('estT4').value = sug.t4 ? 'si' : 'no';
+      document.getElementById('estStatusEsperado').value = sug.status || '';
+      document.getElementById('estNovedad').scrollIntoView({ behavior:'smooth', block:'center' });
+    } else if (tabla === 'motivo') {
+      cancelarEdicionMotivo();
+      document.getElementById('motNovedad').value = sug.novedad || '';
+      document.getElementById('motGrupo').value = sug.grupo || '';
+      document.getElementById('motProblema').value = sug.problema || '';
+      document.getElementById('motMotivo').value = sug.motivo || '';
+      document.getElementById('motCausa').value = sug.causa || '';
+      document.getElementById('motNovedad').scrollIntoView({ behavior:'smooth', block:'center' });
+    }
+  }
+
+  function irAAgregarReferencia(idx) {
+    const sug = window.sugerenciasReferenciaActuales[idx];
+    if (!sug) return;
+
+    // Cambiar a la pestana de Tabla de referencia
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.querySelector('.tab[data-tab="referencia"]').classList.add('active');
+    document.getElementById('view-referencia').classList.add('active');
+
+    if (sug.tabla === 'conjunto') {
+      cancelarEdicionRef();
+      document.getElementById('fGeneracion').value = sug.familia || '';
+      document.getElementById('fNovedad').value = sug.novedad || '';
+      document.getElementById('refFormPanel').scrollIntoView({ behavior:'smooth', block:'center' });
+      document.getElementById('fConjuntoNombre').focus();
+    } else if (sug.tabla === 'estatus') {
+      cancelarEdicionEstatus();
+      document.getElementById('estNovedad').value = sug.novedad || '';
+      document.getElementById('estT4').value = sug.t4 ? 'si' : 'no';
+      document.getElementById('estStatusEsperado').value = sug.status || '';
+      document.getElementById('estNovedad').scrollIntoView({ behavior:'smooth', block:'center' });
+      document.getElementById('estStatusEsperado').focus();
+    } else if (sug.tabla === 'motivo') {
+      cancelarEdicionMotivo();
+      document.getElementById('motNovedad').value = sug.novedad || '';
+      document.getElementById('motGrupo').value = sug.grupo || '';
+      document.getElementById('motProblema').value = sug.problema || '';
+      document.getElementById('motMotivo').value = sug.motivo || '';
+      document.getElementById('motCausa').value = sug.causa || '';
+      document.getElementById('motNovedad').scrollIntoView({ behavior:'smooth', block:'center' });
+    }
+  }
+
+  function mostrarOpcionesExistentes() {
+    const hint = document.getElementById('refExistingHint');
+    const familia = document.getElementById('fGeneracion').value.trim().toUpperCase();
+    const novedad = document.getElementById('fNovedad').value.trim().toUpperCase();
+    if (!familia || !novedad) { hint.style.display = 'none'; return; }
+
+    const existentes = referencia.filter(r =>
+      r.familia === familia && normalizarTexto(r.novedad) === normalizarTexto(novedad) && r.id !== refEditId
+    );
+
+    if (!existentes.length) { hint.style.display = 'none'; return; }
+
+    hint.style.display = '';
+    hint.innerHTML = `ℹ️ Ya tenés ${existentes.length} conjunto${existentes.length>1?'s':''} válido${existentes.length>1?'s':''} para <b>${escapeHtml(familia)} / ${escapeHtml(novedad)}</b>: ` +
+      existentes.map(e => `<span class="chip">${escapeHtml(e.conjunto_nombre)} (${escapeHtml(e.conjunto_codigo)})</span>`).join(' ') +
+      `<br>Podés agregar otro más — todos van a ser aceptados como válidos para esta novedad.`;
+  }
+
+  function guardarDesdeFormulario() {
+    const familia = document.getElementById('fGeneracion').value.trim().toUpperCase();
+    const novedad = document.getElementById('fNovedad').value.trim().toUpperCase();
+    const conjunto_nombre = document.getElementById('fConjuntoNombre').value.trim();
+    const conjunto_codigo = document.getElementById('fConjuntoCodigo').value.trim();
+    const warnEl = document.getElementById('refFormWarning');
+
+    if (!familia || !novedad || !conjunto_nombre) {
+      warnEl.style.display = '';
+      warnEl.textContent = 'Completá al menos Generación, Novedad y Denominación de conjunto.';
+      refForzarGuardado = false;
+      return;
+    }
+
+    // Solo es "duplicado real" si generación + novedad + conjunto son EXACTAMENTE iguales.
+    // Tener varios conjuntos válidos para la misma generación+novedad es algo normal y permitido
+    // (ej. distintas CPU o distintos hoppers que cumplen la misma función).
+    const duplicadoExacto = referencia.find(r =>
+      r.id !== refEditId &&
+      r.familia === familia &&
+      normalizarTexto(r.novedad) === normalizarTexto(novedad) &&
+      normalizarTexto(r.conjunto_nombre) === normalizarTexto(conjunto_nombre)
+    );
+
+    if (duplicadoExacto && !refForzarGuardado) {
+      warnEl.style.display = '';
+      warnEl.innerHTML = `Esta combinación exacta ya existe: <b>${escapeHtml(familia)} / ${escapeHtml(novedad)}</b> → "${escapeHtml(duplicadoExacto.conjunto_nombre)}".
+        <br><button class="icon-btn" style="margin-top:6px;" onclick="refForzarGuardado=true; guardarDesdeFormulario();">Guardar igual (fila repetida)</button>`;
+      return;
+    }
+    refForzarGuardado = false;
+
+    if (refEditId) {
+      const fila = referencia.find(f => f.id === refEditId);
+      Object.assign(fila, { familia, novedad, conjunto_nombre, conjunto_codigo });
+    } else {
+      const id = 'r' + Date.now();
+      referencia.unshift({ id, familia, novedad, conjunto_nombre, conjunto_codigo });
+      refEditId = id;
+    }
+
+    guardarReferencia();
+    poblarFiltroFamilias();
+    const idGuardado = refEditId;
+    cancelarEdicionRef();
+    renderReferencia();
+
+    setTimeout(() => {
+      const fila = document.querySelector(`tr[data-id="${idGuardado}"]`);
+      if (fila) {
+        fila.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        fila.classList.add('flash');
+        setTimeout(() => fila.classList.remove('flash'), 1800);
+      }
+    }, 50);
+  }
+
+  // ---------- Validación de avisos ----------
+  function normalizarTexto(s) {
+    return (s || '').toString()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // quita tildes/acentos
+      .replace(/\s+/g,' ').trim().toUpperCase();
+  }
+
+  function detectarFamilia(objeto) {
+    const o = normalizarTexto(objeto);
+    if (o.includes('MRAII')) return 'MRAII';
+    if (o.includes('LSR')) return 'LSR';
+    if (o.includes('PDV')) return 'PDV';
+    if (o.includes('MRA')) return 'MRA';
+    return 'OTRO';
+  }
+
+  function extraerNovedad(objeto, textoBreve) {
+    // El orden de las palabras SI importa: el codigo al inicio del texto breve
+    // debe coincidir exactamente (salvo el simbolo #) con la denominacion de objeto.
+    const objNorm = normalizarTexto((objeto || '').replace(/#/g,''));
+    const textoNorm = normalizarTexto(textoBreve);
+    if (textoNorm.startsWith(objNorm)) {
+      return textoNorm.slice(objNorm.length).trim();
+    }
+    return null;
+  }
+
+  // Resalta en rojo la(s) palabra(s) puntuales que no coinciden entre el objeto
+  // tecnico y el inicio del texto breve, para ubicar el error mas rapido (ej. "CP" vs "CPU").
+  function resaltarDiferenciaObjetoTexto(objeto, textoBreve) {
+    const objTokens = (objeto || '').trim().split(/\s+/).filter(Boolean);
+    const textoTokens = (textoBreve || '').trim().split(/\s+/).filter(Boolean);
+
+    const objetoHtml = [];
+    for (let i = 0; i < objTokens.length; i++) {
+      const a = objTokens[i];
+      const b = textoTokens[i];
+      const aNorm = normalizarTexto(a.replace(/#/g,''));
+      const bNorm = b !== undefined ? normalizarTexto(b) : undefined;
+      const distinto = bNorm === undefined || aNorm !== bNorm;
+      objetoHtml.push(distinto ? `<span class="diff-word">${escapeHtml(a)}</span>` : escapeHtml(a));
+    }
+
+    const textoHtml = [];
+    const limite = Math.max(objTokens.length, textoTokens.length);
+    for (let i = 0; i < limite; i++) {
+      const a = objTokens[i];
+      const b = textoTokens[i];
+      if (b === undefined) continue;
+      if (a === undefined) { textoHtml.push(escapeHtml(b)); continue; } // ya es parte de la novedad
+      const aNorm = normalizarTexto(a.replace(/#/g,''));
+      const bNorm = normalizarTexto(b);
+      const distinto = aNorm !== bNorm;
+      textoHtml.push(distinto ? `<span class="diff-word">${escapeHtml(b)}</span>` : escapeHtml(b));
+    }
+
+    return { objetoHtml: objetoHtml.join(' '), textoBreveHtml: textoHtml.join(' ') };
+  }
+
+  // Resalta la(s) palabra(s) de la novedad que no coinciden con la version correcta
+  // mas cercana de tu tabla (ej. "DESACTIVAD" vs "DESACTIVADO").
+  function resaltarDiferenciaNovedad(actual, cercano) {
+    const aTokens = (actual || '').trim().split(/\s+/).filter(Boolean);
+    const cTokens = (cercano || '').trim().split(/\s+/).filter(Boolean);
+    if (aTokens.length !== cTokens.length) {
+      return aTokens.map(t => `<span class="diff-word">${escapeHtml(t)}</span>`).join(' ');
+    }
+    return aTokens.map((t, i) => {
+      const igual = normalizarTexto(t) === normalizarTexto(cTokens[i]);
+      return igual ? escapeHtml(t) : `<span class="diff-word">${escapeHtml(t)}</span>`;
+    }).join(' ');
+  }
+
+  function buscarConjuntoEsperado(familia, novedad) {
+    return referencia.filter(r => r.familia === familia && normalizarTexto(r.novedad) === normalizarTexto(novedad));
+  }
+
+  // ---------- Referencia de "Status de usuario" para el segundo formato de Excel ----------
+  // (ZRAU no necesita chequeo; para el resto, el status esperado depende de la novedad
+  // y de si la maquina termina en T4 -- el usuario puede editar cualquier fila.)
+  let referenciaEstatus = [];
+  async function cargarReferenciaEstatus() {
+    try {
+      const r = await window.storage.get('referencia_estatus', false);
+      referenciaEstatus = JSON.parse(r.value);
+    } catch (e) {
+      referenciaEstatus = SEED_ESTATUS.map(x => ({...x}));
+      await guardarReferenciaEstatus();
+    }
+    renderReferenciaEstatus();
+  }
+  async function guardarReferenciaEstatus() {
+    try { await window.storage.set('referencia_estatus', JSON.stringify(referenciaEstatus), false); } catch(e) {}
+    revalidarSiHayArchivo();
+  }
+  function buscarOpcionesStatus(novedad, esT4) {
+    const nov = normalizarTexto(novedad);
+    const conT4 = referenciaEstatus.filter(r => normalizarTexto(r.novedad) === nov && !!r.t4 === !!esT4);
+    return conT4.length ? conT4 : referenciaEstatus.filter(r => normalizarTexto(r.novedad) === nov);
+  }
+  function terminaEnT4(objeto) {
+    return /T4\b/i.test(String(objeto || ''));
+  }
+
+  let estatusEditId = null;
+  function agregarEstatus() {
+    const novedad = document.getElementById('estNovedad').value.trim().toUpperCase();
+    const t4 = document.getElementById('estT4').value === 'si';
+    const status = document.getElementById('estStatusEsperado').value.trim().toUpperCase();
+    if (!novedad || !status) return;
+    if (estatusEditId) {
+      const e = referenciaEstatus.find(x=>x.id===estatusEditId);
+      if (e) Object.assign(e, { novedad, t4, status });
+      estatusEditId = null;
+      document.getElementById('estBtnLabel').textContent = 'Agregar';
+      document.getElementById('estBtnCancelar').style.display = 'none';
+    } else {
+      referenciaEstatus.unshift({ id:'u'+Date.now(), novedad, t4, status });
+    }
+    guardarReferenciaEstatus();
+    document.getElementById('estNovedad').value = '';
+    document.getElementById('estStatusEsperado').value = '';
+    renderReferenciaEstatus();
+  }
+  function editarEstatus(id) {
+    const e = referenciaEstatus.find(x=>x.id===id); if (!e) return;
+    estatusEditId = id;
+    document.getElementById('estNovedad').value = e.novedad;
+    document.getElementById('estT4').value = e.t4 ? 'si' : 'no';
+    document.getElementById('estStatusEsperado').value = e.status;
+    document.getElementById('estBtnLabel').textContent = 'Guardar cambios';
+    document.getElementById('estBtnCancelar').style.display = '';
+    document.getElementById('estNovedad').scrollIntoView({behavior:'smooth', block:'center'});
+  }
+  function cancelarEdicionEstatus() {
+    estatusEditId = null;
+    document.getElementById('estNovedad').value = '';
+    document.getElementById('estT4').value = 'no';
+    document.getElementById('estStatusEsperado').value = '';
+    document.getElementById('estBtnLabel').textContent = 'Agregar';
+    document.getElementById('estBtnCancelar').style.display = 'none';
+  }
+  function borrarEstatus(id) {
+    referenciaEstatus = referenciaEstatus.filter(x=>x.id!==id);
+    guardarReferenciaEstatus(); renderReferenciaEstatus();
+  }
+  function renderReferenciaEstatus() {
+    const tbody = document.getElementById('estatusBody');
+    if (!tbody) return;
+    const filtro = (document.getElementById('estatusFiltro')?.value || '').trim().toUpperCase();
+    let lista = referenciaEstatus;
+    if (filtro) lista = lista.filter(e => e.novedad.toUpperCase().includes(filtro) || e.status.toUpperCase().includes(filtro));
+    lista = [...lista].sort((a,b) => a.novedad.localeCompare(b.novedad));
+    if (!lista.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty">Sin resultados.</td></tr>'; return; }
+    tbody.innerHTML = lista.map(e => `
+      <tr>
+        <td>${escapeHtml(e.novedad)}</td>
+        <td>${e.t4 ? 'Sí (T4)' : 'No'}</td>
+        <td><b>${escapeHtml(e.status)}</b></td>
+        <td>
+          <button class="icon-btn" onclick="editarEstatus('${e.id}')"><i class="bi bi-pencil-square"></i></button>
+          <button class="icon-btn del" onclick="borrarEstatus('${e.id}')"><i class="bi bi-trash3"></i></button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  // ---------- Referencia de "clasificacion del motivo" (Grupo/Problema/Motivo/Causa) ----------
+  // Solo aplica a los archivos que traen esas 4 columnas ademas de "Descripción".
+  let referenciaMotivo = [];
+  async function cargarReferenciaMotivo() {
+    try {
+      const r = await window.storage.get('referencia_motivo', false);
+      referenciaMotivo = JSON.parse(r.value);
+    } catch (e) {
+      referenciaMotivo = SEED_MOTIVO.map(x => ({...x}));
+      await guardarReferenciaMotivo();
+    }
+    renderReferenciaMotivo();
+  }
+  async function guardarReferenciaMotivo() {
+    try { await window.storage.set('referencia_motivo', JSON.stringify(referenciaMotivo), false); } catch(e) {}
+    revalidarSiHayArchivo();
+  }
+  function buscarOpcionesMotivo(novedad) {
+    return referenciaMotivo.filter(r => normalizarTexto(r.novedad) === normalizarTexto(novedad));
+  }
+
+  let motivoEditId = null;
+  function agregarMotivo() {
+    const novedad = document.getElementById('motNovedad').value.trim().toUpperCase();
+    const grupo = document.getElementById('motGrupo').value.trim();
+    const problema = document.getElementById('motProblema').value.trim();
+    const motivo = document.getElementById('motMotivo').value.trim();
+    const causa = document.getElementById('motCausa').value.trim();
+    if (!novedad) return;
+    if (motivoEditId) {
+      const m = referenciaMotivo.find(x=>x.id===motivoEditId);
+      if (m) Object.assign(m, { novedad, grupo, problema, motivo, causa });
+      motivoEditId = null;
+      document.getElementById('motBtnLabel').textContent = 'Agregar';
+      document.getElementById('motBtnCancelar').style.display = 'none';
+    } else {
+      // Ya no se borra lo anterior: una misma novedad puede tener varias combinaciones
+      // validas distintas (ej. "Bloqueo lógico de lectora" y "Lectora desconfigurada").
+      // Solo se evita guardar dos veces la MISMA combinacion exacta.
+      const yaExiste = referenciaMotivo.some(x =>
+        normalizarTexto(x.novedad) === novedad &&
+        normalizarTexto(x.grupo) === normalizarTexto(grupo) &&
+        normalizarTexto(x.problema) === normalizarTexto(problema) &&
+        normalizarTexto(x.motivo) === normalizarTexto(motivo)
+      );
+      if (!yaExiste) {
+        referenciaMotivo.unshift({ id:'m'+Date.now(), novedad, grupo, problema, motivo, causa });
+      }
+    }
+    guardarReferenciaMotivo();
+    ['motNovedad','motGrupo','motProblema','motMotivo','motCausa'].forEach(id => document.getElementById(id).value='');
+    renderReferenciaMotivo();
+  }
+  function editarMotivo(id) {
+    const m = referenciaMotivo.find(x=>x.id===id); if (!m) return;
+    motivoEditId = id;
+    document.getElementById('motNovedad').value = m.novedad;
+    document.getElementById('motGrupo').value = m.grupo;
+    document.getElementById('motProblema').value = m.problema;
+    document.getElementById('motMotivo').value = m.motivo;
+    document.getElementById('motCausa').value = m.causa;
+    document.getElementById('motBtnLabel').textContent = 'Guardar cambios';
+    document.getElementById('motBtnCancelar').style.display = '';
+    document.getElementById('motNovedad').scrollIntoView({behavior:'smooth', block:'center'});
+  }
+  function cancelarEdicionMotivo() {
+    motivoEditId = null;
+    ['motNovedad','motGrupo','motProblema','motMotivo','motCausa'].forEach(id => document.getElementById(id).value='');
+    document.getElementById('motBtnLabel').textContent = 'Agregar';
+    document.getElementById('motBtnCancelar').style.display = 'none';
+  }
+  function borrarMotivo(id) {
+    referenciaMotivo = referenciaMotivo.filter(x=>x.id!==id);
+    guardarReferenciaMotivo(); renderReferenciaMotivo();
+  }
+  function renderReferenciaMotivo() {
+    const tbody = document.getElementById('motivoBody');
+    if (!tbody) return;
+    const filtro = (document.getElementById('motivoFiltro')?.value || '').trim().toUpperCase();
+    let lista = referenciaMotivo;
+    if (filtro) lista = lista.filter(m => m.novedad.toUpperCase().includes(filtro));
+    lista = [...lista].sort((a,b) => a.novedad.localeCompare(b.novedad));
+    if (!lista.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty">Sin resultados.</td></tr>'; return; }
+    tbody.innerHTML = lista.map(m => `
+      <tr>
+        <td>${escapeHtml(m.novedad)}</td>
+        <td>${escapeHtml(m.grupo)}</td>
+        <td>${escapeHtml(m.problema)}</td>
+        <td>${escapeHtml(m.motivo)}</td>
+        <td>${escapeHtml(m.causa)}</td>
+        <td>
+          <button class="icon-btn" onclick="editarMotivo('${m.id}')"><i class="bi bi-pencil-square"></i></button>
+          <button class="icon-btn del" onclick="borrarMotivo('${m.id}')"><i class="bi bi-trash3"></i></button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  // Intenta calcular cuantos minutos pasaron entre "Hora inicio real" y "Fin real".
+  // Soporta valores tipo fecha+hora completos, o solo hora (HH:MM[:SS]).
+  function parsearFechaHora(valor) {
+    if (!valor) return null;
+    let s = String(valor).trim();
+
+    // Formato AM/PM en español: "8:12:00 a. m." / "8:12 p.m." / "8:12:00 AM"
+    const conAmPm = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([ap])\.?\s*\.?\s*m\.?$/i);
+    if (conAmPm) {
+      let [, hh, mm, ss, ap] = conAmPm;
+      hh = parseInt(hh); mm = parseInt(mm); ss = ss ? parseInt(ss) : 0;
+      const esPM = ap.toLowerCase() === 'p';
+      if (esPM && hh < 12) hh += 12;
+      if (!esPM && hh === 12) hh = 0;
+      return { minutosDelDia: hh*60 + mm + ss/60, fecha: null };
+    }
+
+    // Solo hora 24h: 13:44 o 13:44:20
+    const soloHora = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (soloHora) {
+      const [, hh, mm, ss] = soloHora;
+      return { minutosDelDia: parseInt(hh)*60 + parseInt(mm) + (ss?parseInt(ss)/60:0), fecha: null };
+    }
+
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      return { minutosDelDia: d.getHours()*60 + d.getMinutes() + d.getSeconds()/60, fecha: d };
+    }
+    return null;
+  }
+
+  function calcularDuracionMinutos(horaInicio, horaFin) {
+    const a = parsearFechaHora(horaInicio);
+    const b = parsearFechaHora(horaFin);
+    if (!a || !b) return null;
+
+    if (a.fecha && b.fecha) {
+      const diffMs = b.fecha - a.fecha;
+      if (diffMs < 0) return null;
+      return diffMs / 60000;
+    }
+    let diff = b.minutosDelDia - a.minutosDelDia;
+    if (diff < 0) diff += 24 * 60; // cruzo medianoche
+    return diff;
+  }
+
+  // Detecta el indice de cada columna que nos interesa a partir de la fila de encabezado.
+  function mapearColumnas(partesEncabezado) {
+    const h = partesEncabezado.map(p => normalizarTexto(p));
+    const find = (pred) => h.findIndex(pred);
+
+    const idx = {};
+    idx.notificacion = find(x => x.includes('NOTIFICAC'));
+    idx.orden = find(x => x === 'ORDEN' || x.startsWith('ORDEN'));
+    idx.objeto = find(x => x.includes('OBJETO'));
+    idx.textoBreve = find(x => x.includes('TEXTO BREVE') || x.includes('TEXTO BRE'));
+    idx.denomConjunto = find(x => x.includes('DENOMINAC') && x.includes('CONJUNTO'));
+    idx.conjuntoCodigo = find(x => x.includes('CONJUNTO') && !x.includes('DENOMINAC'));
+    idx.ptoTrabajo = find(x => x.includes('PTO') && (x.includes('TRAB') || x.includes('TRB') || x.includes('TBJO') || x.includes('TBJ')));
+    idx.status = find(x => x.includes('STATUS'));
+    // Columnas opcionales para calcular la duracion del aviso (no son obligatorias)
+    idx.horaInicioReal = find(x => x.includes('HORA') && x.includes('INICIO') && x.includes('REAL'));
+    idx.finReal = find(x => (x.includes('FIN') && x.includes('REAL')) || x === 'FIN REAL');
+    idx.responsable = find(x => x.includes('AUTOR') || x.includes('CREADO'));
+
+    return idx;
+  }
+
+  // Segundo formato de Excel: usa "Descripción" en vez de "Texto breve", "Status de
+  // usuario" (ZRAU/A00/A01/A02) en vez de "Status del sistema", y no trae columnas de
+  // Conjunto. Se detecta por la presencia de "STATUS DE USUARIO" en el encabezado.
+  function esFormatoB(encabezadoNormalizado) {
+    return encabezadoNormalizado.some(x => x.includes('STATUS') && x.includes('USUARIO'));
+  }
+  function mapearColumnasFormatoB(partesEncabezado) {
+    const h = partesEncabezado.map(p => normalizarTexto(p));
+    const find = (pred) => h.findIndex(pred);
+
+    const idx = {};
+    idx.notificacion = find(x => x.includes('NOTIFICAC'));
+    idx.orden = find(x => x === 'ORDEN' || x.startsWith('ORDEN'));
+    idx.objeto = find(x => x.includes('OBJETO'));
+    idx.textoBreve = find(x => x.includes('DESCRIPCION')); // hace el mismo papel que "Texto breve"
+    idx.ptoTrabajo = find(x => x.includes('PTO') && (x.includes('TRAB') || x.includes('TRB') || x.includes('TBJO') || x.includes('TBJ')));
+    idx.statusUsuario = find(x => x.includes('STATUS') && x.includes('USUARIO'));
+    idx.estInst = find(x => x.includes('EST') && x.includes('INST'));
+    idx.horaInicioReal = find(x => x.includes('HORA') && x.includes('INICIO'));
+    idx.finReal = find(x => x.includes('HORA') && x.includes('FIN'));
+    idx.responsable = find(x => x.includes('AUTOR') || x.includes('CREADO'));
+    // Columnas opcionales: clasificacion del motivo y duracion de parada (no todos los
+    // archivos las traen, asi que no son obligatorias)
+    idx.grupoCodigos = find(x => x.includes('GRUPO') && x.includes('CODIGO'));
+    idx.textoProblema = find(x => x.includes('TEXTO') && x.includes('CODIGO') && x.includes('PROBLEMA'));
+    idx.textoMotivo = find(x => x.includes('TEXTO') && x.includes('CODIGO') && x.includes('MOTIVO'));
+    idx.textoCausa = find(x => x.includes('TEXTO') && x.includes('CAUSA'));
+    idx.duracionParada = find(x => x.includes('DURACION') && x.includes('PARADA'));
+    idx.textoParteObjeto = find(x => x.includes('TEXTO') && x.includes('PARTE') && x.includes('OBJETO'));
+    idx.posicion = find(x => x === 'POSICION' || x.startsWith('POSICION'));
+
+    return idx;
+  }
+
+  function esEncabezado(partes) {
+    return /notificaci|orden|denominaci|texto breve/i.test(partes.join(' '));
+  }
+
+  // ---------- Distancia de edicion simple (para detectar typos en la novedad) ----------
+  function distanciaLevenshtein(a, b) {
+    const m = a.length, n = b.length;
+    const dp = Array.from({length: m+1}, () => new Array(n+1).fill(0));
+    for (let i=0;i<=m;i++) dp[i][0]=i;
+    for (let j=0;j<=n;j++) dp[0][j]=j;
+    for (let i=1;i<=m;i++) {
+      for (let j=1;j<=n;j++) {
+        dp[i][j] = a[i-1]===b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+      }
+    }
+    return dp[m][n];
+  }
+
+  // Como distanciaLevenshtein, pero comparando palabra por palabra en vez de letra por letra.
+  // Esto detecta cuando falta o sobra una palabra entera (ej. el "NO" de "NO LEE TARJETAS"),
+  // algo que la comparacion por letras sola no siempre alcanza a cubrir.
+  function distanciaPalabras(a, b) {
+    const ta = a.split(' '), tb = b.split(' ');
+    const m = ta.length, n = tb.length;
+    const dp = Array.from({length: m+1}, () => new Array(n+1).fill(0));
+    for (let i=0;i<=m;i++) dp[i][0]=i;
+    for (let j=0;j<=n;j++) dp[0][j]=j;
+    for (let i=1;i<=m;i++) {
+      for (let j=1;j<=n;j++) {
+        dp[i][j] = ta[i-1]===tb[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+      }
+    }
+    return dp[m][n];
+  }
+
+  function novedadMasParecida(novedad) {
+    const nov = normalizarTexto(novedad);
+
+    // 1) Diccionario manual de errores conocidos: si el usuario ya cargo este typo
+    // explicitamente, se usa directo sin depender de la heuristica de distancia.
+    const enDiccionario = diccionarioTypos.find(d => normalizarTexto(d.incorrecta) === nov);
+    if (enDiccionario) {
+      return { exacta: false, cercana: true, texto: normalizarTexto(enDiccionario.correcta), distancia: 0, porDiccionario: true };
+    }
+
+    const canon = [...new Set(referencia.map(r => normalizarTexto(r.novedad)).filter(Boolean))];
+    if (canon.includes(nov)) return { exacta: true, texto: nov };
+
+    let mejor = null, mejorDistChar = Infinity, mejorDistPal = Infinity;
+    canon.forEach(c => {
+      const dp = distanciaPalabras(nov, c);
+      const dc = distanciaLevenshtein(nov, c);
+      if (dp < mejorDistPal || (dp === mejorDistPal && dc < mejorDistChar)) {
+        mejorDistPal = dp; mejorDistChar = dc; mejor = c;
+      }
+    });
+
+    const umbralChar = Math.max(2, Math.round(nov.length * 0.15));
+    // Cercana si: pocos caracteres distintos (typo dentro de una palabra),
+    // O exactamente una palabra completa falta/sobra/esta mal (ej. falto el "NO").
+    // Cercana si: pocos caracteres distintos (typo dentro de una palabra),
+    // O exactamente una palabra completa falta/sobra/esta mal (ej. falto el "NO"),
+    // O dos palabras distintas PERO las letras en general siguen siendo muy parecidas
+    // (cubre casos combinados, ej. falta el "NO" Y ademas falta una "S").
+    const cercana = mejor !== null && mejorDistChar > 0 && (
+      mejorDistChar <= umbralChar ||
+      mejorDistPal === 1 ||
+      (mejorDistPal === 2 && mejorDistChar <= umbralChar + 3)
+    );
+    if (cercana) {
+      return { exacta: false, cercana: true, texto: mejor, distancia: mejorDistChar };
+    }
+    return { exacta: false, cercana: false };
+  }
+
+  // Intenta detectar la novedad aunque el codigo (objeto/texto breve) no haya coincidido
+  // exactamente -- por ejemplo si sobra o falta una palabra en el codigo, el punto de corte
+  // se corre. Probamos varios puntos de corte y nos quedamos con el que mejor matchee.
+  function extraerNovedadAproximada(objeto, textoBreve) {
+    const objTokens = (objeto || '').replace(/#/g,'').trim().split(/\s+/).filter(Boolean);
+    const textoTokens = (textoBreve || '').trim().split(/\s+/).filter(Boolean);
+    let mejorCand = null, mejorChequeo = null, mejorPrioridad = -1;
+    for (let offset = -2; offset <= 2; offset++) {
+      const start = objTokens.length + offset;
+      if (start < 0 || start >= textoTokens.length) continue;
+      const cand = textoTokens.slice(start).join(' ');
+      const chequeo = novedadMasParecida(cand);
+      const prioridad = chequeo.porDiccionario ? 3 : (chequeo.exacta ? 2 : (chequeo.cercana ? 1 : 0));
+      if (prioridad > mejorPrioridad) { mejorPrioridad = prioridad; mejorCand = cand; mejorChequeo = chequeo; }
+    }
+    if (mejorPrioridad >= 1) return { novedad: mejorCand, chequeo: mejorChequeo };
+    return null;
+  }
+
+  // ---------- Deteccion de posibles errores de tipeo dentro de tu propia tabla ----------
+  // Agrupa entradas de la MISMA generacion cuya novedad es muy parecida (pero no identica)
+  // a otra ya existente -- suele significar que una es la version correcta y la otra un typo.
+  let ultimosDuplicados = [];
+
+  function detectarVariantesSimilares() {
+    const porFamilia = {};
+    referencia.forEach(r => {
+      if (!porFamilia[r.familia]) porFamilia[r.familia] = [];
+      porFamilia[r.familia].push(r);
+    });
+
+    const clusters = [];
+    Object.entries(porFamilia).forEach(([familia, items]) => {
+      const usados = new Set();
+      for (let i = 0; i < items.length; i++) {
+        if (usados.has(items[i].id)) continue;
+        const base = items[i];
+        const cluster = [base];
+        for (let j = i + 1; j < items.length; j++) {
+          if (usados.has(items[j].id)) continue;
+          const a = normalizarTexto(base.novedad);
+          const b = normalizarTexto(items[j].novedad);
+          if (a === b) continue; // exactamente igual: es una opcion valida de conjunto, no un typo
+          const dist = distanciaLevenshtein(a, b);
+          const umbral = Math.max(2, Math.round(Math.max(a.length, b.length) * 0.18));
+          if (dist > 0 && dist <= umbral) {
+            cluster.push(items[j]);
+            usados.add(items[j].id);
+          }
+        }
+        if (cluster.length > 1) {
+          usados.add(base.id);
+          clusters.push({ familia, items: cluster });
+        }
+      }
+    });
+    return clusters;
+  }
+
+  function renderDuplicados() {
+    const panel = document.getElementById('duplicadosPanel');
+    ultimosDuplicados = detectarVariantesSimilares();
+    panel.style.display = '';
+
+    if (!ultimosDuplicados.length) {
+      panel.innerHTML = `<div class="empty" style="color:var(--ok)">
+        <i class="bi bi-check-circle"></i> No se detectaron redacciones parecidas/posibles typos en tu tabla actual.
+      </div>`;
+      return;
+    }
+
+    panel.innerHTML = `<p style="margin:0 0 12px 0;font-size:12.5px;color:var(--muted)">
+        Estas novedades de tu tabla son muy parecidas entre sí — probablemente una está bien escrita y la otra es un typo.
+        Elegí cuál es la redacción correcta para cada grupo: el resto se va a actualizar automáticamente para que coincidan.
+      </p>` +
+      ultimosDuplicados.map((c, ci) => `
+        <div class="dup-cluster">
+          <div class="dup-familia">${escapeHtml(c.familia)}</div>
+          ${c.items.map(it => `
+            <div class="dup-item">
+              <span class="dup-texto">"${escapeHtml(it.novedad)}"</span>
+              <span class="dup-conjunto">${escapeHtml(it.conjunto_nombre)} (${escapeHtml(it.conjunto_codigo)})</span>
+              <button class="icon-btn" onclick="usarRedaccionCorrecta(${ci}, '${it.id}')">
+                <i class="bi bi-check2"></i> Esta es la correcta
+              </button>
+            </div>
+          `).join('')}
+        </div>
+      `).join('');
+  }
+
+  function usarRedaccionCorrecta(clusterIdx, idElegido) {
+    const cluster = ultimosDuplicados[clusterIdx];
+    if (!cluster) return;
+    const elegido = cluster.items.find(x => x.id === idElegido);
+    if (!elegido) return;
+    const textoCorrecto = elegido.novedad;
+
+    cluster.items.forEach(it => {
+      if (it.id !== idElegido) {
+        const fila = referencia.find(r => r.id === it.id);
+        if (fila) fila.novedad = textoCorrecto;
+      }
+    });
+
+    guardarReferencia();
+    poblarFiltroFamilias();
+    renderReferencia();
+    renderDuplicados();
+  }
+
+
+  function procesarFilas(filasCrudas) {
+    // filasCrudas: array de arrays (primera fila = encabezado)
+    if (!filasCrudas.length) return { filas: [], colIdx: null, faltanColumnas: ['(sin datos)'] };
+
+    const encabezado = filasCrudas[0].map(c => (c==null? '' : String(c)));
+    const encabezadoNorm = encabezado.map(normalizarTexto);
+    const formatoB = esEncabezado(encabezado) && esFormatoB(encabezadoNorm);
+
+    let colIdx, datos;
+    if (formatoB) {
+      colIdx = mapearColumnasFormatoB(encabezado);
+      datos = filasCrudas.slice(1);
+    } else if (esEncabezado(encabezado)) {
+      colIdx = mapearColumnas(encabezado);
+      datos = filasCrudas.slice(1);
+    } else {
+      colIdx = { notificacion: 3, orden: 4, objeto: 7, textoBreve: 8, denomConjunto: 9, conjuntoCodigo: 10, ptoTrabajo: 11, status: 12 };
+      datos = filasCrudas;
+    }
+
+    const columnasObligatorias = formatoB
+      ? ['objeto','textoBreve','ptoTrabajo','statusUsuario','estInst']
+      : ['objeto','textoBreve','denomConjunto','ptoTrabajo','status'];
+    const faltanColumnas = columnasObligatorias.filter(k => colIdx[k] === -1 || colIdx[k] === undefined);
+    if (faltanColumnas.length) return { filas: [], colIdx, faltanColumnas };
+
+    const get = (partes, k) => (colIdx[k] !== undefined && colIdx[k] !== -1) ? String(partes[colIdx[k]] ?? '').trim() : '';
+
+    // Algunos archivos traen VARIAS filas por cada aviso (misma Notificación repetida):
+    // una fila con el tipo "Correctivo Remoto/Sito" y otras filas con los nombres de los
+    // tecnicos, todo en la columna "Texto código parte objeto". Se agrupan en un solo
+    // aviso, usando la fila "Correctivo..." como base y juntando los nombres aparte.
+    let responsablesPorNotif = {};
+    if (formatoB && colIdx.textoParteObjeto !== -1 && colIdx.notificacion !== -1) {
+      const gruposPorNotif = {};
+      datos.forEach(partes => {
+        if (!partes || partes.every(c => c==null || String(c).trim()==='')) return;
+        const notif = get(partes, 'notificacion');
+        if (!notif) return;
+        if (!gruposPorNotif[notif]) gruposPorNotif[notif] = [];
+        gruposPorNotif[notif].push(partes);
+      });
+
+      const huboGrupos = Object.values(gruposPorNotif).some(g => g.length > 1);
+      if (huboGrupos) {
+        const nuevosDatos = [];
+        Object.entries(gruposPorNotif).forEach(([notif, grupo]) => {
+          if (colIdx.posicion !== -1) {
+            // La Posicion 2 es especificamente la del responsable principal del aviso
+            const filaPos2 = grupo.find(p => get(p, 'posicion').replace(/\.0$/,'') === '2');
+            if (filaPos2) {
+              const nombre = get(filaPos2, 'textoParteObjeto');
+              if (nombre) responsablesPorNotif[notif] = nombre;
+            }
+          } else {
+            // Sin columna Posicion: juntar todos los nombres que no sean "Correctivo..."
+            const nombres = grupo
+              .map(p => get(p, 'textoParteObjeto'))
+              .filter(v => v && !/^correctivo/i.test(v));
+            if (nombres.length) responsablesPorNotif[notif] = nombres.join(', ');
+          }
+
+          const base = grupo.find(p => /^correctivo/i.test(get(p, 'textoParteObjeto'))) || grupo[0];
+          nuevosDatos.push(base);
+        });
+        // conservar tambien filas sueltas sin notificacion (no deberian perderse)
+        datos.forEach(partes => {
+          const notif = get(partes, 'notificacion');
+          if (!notif) nuevosDatos.push(partes);
+        });
+        datos = nuevosDatos;
+      }
+    }
+
+    const filas = [];
+    datos.forEach((partes, i) => {
+      if (!partes || partes.every(c => c==null || String(c).trim()==='')) return;
+      if (esEncabezado(partes.map(c => c==null?'':String(c)))) return;
+
+      const notificacion = get(partes,'notificacion');
+      const orden = get(partes,'orden');
+      const objeto = get(partes,'objeto');
+      const textoBreve = get(partes,'textoBreve');
+      const ptoTrabajo = get(partes,'ptoTrabajo');
+      const horaInicioReal = get(partes,'horaInicioReal');
+      const finReal = get(partes,'finReal');
+      const duracionMinutos = calcularDuracionMinutos(horaInicioReal, finReal);
+      const responsable = responsablesPorNotif[notificacion] || get(partes,'responsable');
+
+      if (!objeto && !textoBreve) return;
+
+      const problemas = [];
+
+      if (!orden) problemas.push({ tipo: 'orden', texto: 'Orden vacía — este aviso debe tener un número de Orden asignado' });
+
+      // ---- Objeto / texto breve (comun a los dos formatos) ----
+      const novedad = extraerNovedad(objeto, textoBreve);
+      let diffHtml = null;
+      if (novedad === null) {
+        diffHtml = resaltarDiferenciaObjetoTexto(objeto, textoBreve);
+        const resultAprox = extraerNovedadAproximada(objeto, textoBreve);
+        if (resultAprox && resultAprox.chequeo.cercana) {
+          problemas.push({ tipo: 'textobreve', texto: `Texto breve actual errado: "${textoBreve}" — Debe empezar igual que el objeto "${objeto}" y la novedad correcta es "${resultAprox.chequeo.texto}"` });
+        } else {
+          problemas.push({ tipo: 'textobreve', texto: `Texto breve actual errado: "${textoBreve}" — Debe iniciar igual que el objeto: "${objeto}"` });
+        }
+      }
+
+      const familia = detectarFamilia(objeto);
+      let conjuntoEsperado = [];
+      let sinReferencia = false;
+      let sugerenciaReferencia = null;
+      let sugerenciaRedaccion = null;
+      let diffNovedadHtml = null;
+      let chequeoNovedad = null;
+      if (novedad !== null && familia !== 'OTRO') {
+        chequeoNovedad = novedadMasParecida(novedad);
+        if (chequeoNovedad.cercana) {
+          problemas.push({ tipo: 'redaccion', texto: `Texto breve actual errado: "${novedad}" — Texto correcto: "${chequeoNovedad.texto}"` });
+          diffNovedadHtml = resaltarDiferenciaNovedad(novedad, chequeoNovedad.texto);
+          // Por si en realidad NO es un typo sino una novedad distinta y legitima que
+          // se parece por casualidad -- se puede agregar tal cual a la tabla con un clic.
+          sugerenciaRedaccion = { tabla: 'conjunto', novedad, familia, conjunto_nombre: get(partes,'denomConjunto') || '', conjunto_codigo: get(partes,'conjuntoCodigo') || '' };
+        }
+        if (!formatoB) {
+          conjuntoEsperado = buscarConjuntoEsperado(familia, novedad);
+          if (conjuntoEsperado.length) {
+            const denomConjunto = get(partes,'denomConjunto');
+            const nombreOk = conjuntoEsperado.some(c => normalizarTexto(denomConjunto) === normalizarTexto(c.conjunto_nombre));
+            if (!nombreOk) {
+              const opciones = conjuntoEsperado.map(c => `"${c.conjunto_nombre}" (${c.conjunto_codigo})`).join(' o ');
+              problemas.push({ tipo: 'conjunto', texto: `Conjunto actual errado: "${denomConjunto}" — Conjunto correcto: ${opciones}` });
+            }
+          } else if (!chequeoNovedad.cercana) {
+            sinReferencia = true;
+            sugerenciaReferencia = { tabla: 'conjunto', novedad, familia };
+          }
+        }
+      }
+
+      if (normalizarTexto(ptoTrabajo).replace(/\s/g,'') !== 'UCO_CS') {
+        problemas.push({ tipo: 'ptotrabajo', texto: `Pto.trabajo actual errado: "${ptoTrabajo}" — Correcto: "UCO_CS"` });
+      }
+
+      let denomConjunto = '', conjuntoCodigo = '', status = '', notificado = true, tipoCorrectivo = null;
+
+      if (formatoB) {
+        // ---- Validaciones propias del formato "Status de usuario" ----
+        const statusUsuario = normalizarTexto(get(partes,'statusUsuario'));
+        const estInst = get(partes,'estInst').trim();
+        status = statusUsuario;
+
+        if (statusUsuario !== 'ZRAU' && statusUsuario !== 'ZRAW' && statusUsuario !== 'A02') {
+          const novedadParaEstatus = novedad !== null ? novedad : (chequeoNovedad && chequeoNovedad.cercana ? chequeoNovedad.texto : null);
+          if (novedadParaEstatus) {
+            const esT4 = terminaEnT4(objeto);
+            const opciones = buscarOpcionesStatus(novedadParaEstatus, esT4);
+            if (opciones.length) {
+              const coincide = opciones.some(o => normalizarTexto(o.status) === statusUsuario);
+              if (!coincide) {
+                const listaOpciones = opciones.map(o => `"${o.status}"`).join(' o ');
+                problemas.push({ tipo: 'statususuario', texto: `Status de usuario actual errado: "${statusUsuario}" — Correcto: ${listaOpciones}`,
+                  sugerenciaValida: { tabla: 'estatus', novedad: novedadParaEstatus, t4: esT4, status: statusUsuario } });
+              }
+            } else {
+              sinReferencia = true;
+              sugerenciaReferencia = { tabla: 'estatus', novedad: novedadParaEstatus, t4: esT4, status: statusUsuario };
+            }
+          }
+        }
+
+        if (!estInst) {
+          problemas.push({ tipo: 'estinst', texto: `Est.inst.tras medida vacío — debe ser "2"` });
+        } else if (estInst.replace(/\.0$/,'') !== '2') {
+          problemas.push({ tipo: 'estinst', texto: `Est.inst.tras medida actual errado: "${estInst}" — Correcto: "2"` });
+        }
+
+        // ---- Determinar si es Correctivo Remoto o Sitio (lo necesitamos para las dos validaciones de abajo) ----
+        const textoParteObjeto = normalizarTexto(get(partes,'textoParteObjeto'));
+        tipoCorrectivo = textoParteObjeto.includes('REMOTO') ? 'remoto' : ((textoParteObjeto.includes('SITO') || textoParteObjeto.includes('SITIO')) ? 'sitio' : null);
+        const esRemoto = tipoCorrectivo === 'remoto';
+        const esSitio = tipoCorrectivo === 'sitio';
+
+        // ---- Clasificacion del motivo (Grupo/Problema/Motivo) - solo si el Excel trae esas columnas ----
+        // Si el aviso es de Sitio, esto varia mucho legitimamente y no se valida.
+        // "Texto de la causa" solo se exige que no este vacio, en CUALQUIER aviso (remoto o sitio) --
+        // nunca se compara su contenido contra nada, porque varia mucho y no dice nada raro.
+        const grupoCodigos = get(partes,'grupoCodigos');
+        const textoProblema = get(partes,'textoProblema');
+        const textoMotivo = get(partes,'textoMotivo');
+        const textoCausa = get(partes,'textoCausa');
+        const tieneColumnasMotivo = colIdx.grupoCodigos !== -1 && colIdx.textoProblema !== -1 && colIdx.textoMotivo !== -1;
+
+        if (colIdx.textoCausa !== -1 && !textoCausa) {
+          problemas.push({ tipo: 'motivo', texto: `Texto de la causa vacío — debe tener algún valor` });
+        }
+
+        if (tieneColumnasMotivo && !esSitio) {
+          const novedadParaMotivo = novedad !== null ? novedad : (chequeoNovedad && chequeoNovedad.cercana ? chequeoNovedad.texto : null);
+          if (novedadParaMotivo) {
+            const opcionesMotivo = buscarOpcionesMotivo(novedadParaMotivo);
+            if (opcionesMotivo.length) {
+              const coincide = opcionesMotivo.some(o =>
+                normalizarTexto(grupoCodigos) === normalizarTexto(o.grupo) &&
+                normalizarTexto(textoProblema) === normalizarTexto(o.problema) &&
+                normalizarTexto(textoMotivo) === normalizarTexto(o.motivo)
+              );
+              if (!coincide) {
+                const listaOpciones = opcionesMotivo.map(o => `"${o.grupo} / ${o.problema} / ${o.motivo}"`).join(' o ');
+                problemas.push({ tipo: 'motivo', texto: `Clasificación actual errada: "${grupoCodigos} / ${textoProblema} / ${textoMotivo}" — Correcta: ${listaOpciones}`,
+                  sugerenciaValida: { tabla: 'motivo', novedad: novedadParaMotivo, grupo: grupoCodigos, problema: textoProblema, motivo: textoMotivo, causa: textoCausa } });
+              }
+            } else {
+              sinReferencia = true;
+              sugerenciaReferencia = { tabla: 'motivo', novedad: novedadParaMotivo, grupo: grupoCodigos, problema: textoProblema, motivo: textoMotivo, causa: textoCausa };
+            }
+          }
+        }
+
+      } else {
+        denomConjunto = get(partes,'denomConjunto');
+        conjuntoCodigo = get(partes,'conjuntoCodigo');
+        status = get(partes,'status');
+
+        const estaNotificado = normalizarTexto(status).includes('NOTI') || normalizarTexto(status).includes('NOTP');
+        if (!estaNotificado) {
+          problemas.push({ tipo: 'status', texto: `Status actual errado: "${status}" — Debe contener: "NOTI" (o "NOTP")` });
+        }
+        if (!normalizarTexto(status).includes('NLIQ')) {
+          problemas.push({ tipo: 'nliq', texto: `Status actual errado: "${status}" — Debe contener: "NLIQ"` });
+        }
+        notificado = estaNotificado;
+      }
+
+      filas.push({
+        error: false, fila: i + 1,
+        notificacion, orden, objeto, textoBreve, denomConjunto, conjuntoCodigo,
+        ptoTrabajo, status, familia, novedad, diffHtml, diffNovedadHtml,
+        sinReferencia, sugerenciaReferencia, sugerenciaRedaccion, problemas, ok: problemas.length === 0, notificado, duracionMinutos, responsable, tipoCorrectivo, tieneEtm: colIdx.estInst !== undefined && colIdx.estInst !== -1
+      });
+    });
+
+    return { filas, colIdx, faltanColumnas: [] };
+  }
+
+  // ---------- Informe de avisos corregidos ----------
+  // ---------- Historial de validaciones (una foto por cada Excel subido) ----------
+  let historial = [];
+  let chartHistorial = null;
+
+  async function cargarHistorial() {
+    try { const r = await window.storage.get('historial_validaciones', false); historial = JSON.parse(r.value) || []; }
+    catch (e) { historial = []; }
+  }
+
+  async function guardarSnapshotHistorial(nombreArchivo, filas) {
+    const total = filas.length;
+    const malas = filas.filter(f => f.error || !f.ok).length;
+    const buenas = total - malas;
+    const sinNoti = filas.filter(f => !f.notificado).length;
+
+    historial.push({
+      fecha: new Date().toISOString(),
+      archivo: nombreArchivo,
+      total, buenas, malas, sinNoti
+    });
+    const limiteH = fechaLimiteRetencion().toISOString();
+    historial = historial.filter(h => !h.fecha || h.fecha >= limiteH);
+    if (historial.length > 2000) historial = historial.slice(-2000);
+
+    try { await window.storage.set('historial_validaciones', JSON.stringify(historial), false); } catch(e) {}
+    if (document.getElementById('view-informe').classList.contains('active')) renderHistorial();
+  }
+
+  function renderHistorial() {
+    const panel = document.getElementById('historialPanel');
+    if (!panel) return;
+    if (!historial.length) {
+      panel.innerHTML = '<div class="empty">Todavía no hay historial — se va guardando una foto cada vez que subís un Excel.</div>';
+      return;
+    }
+    panel.innerHTML = `
+      <div class="form-title" style="margin-bottom:10px;">Historial de validaciones</div>
+      <canvas id="graficoHistorial" height="90"></canvas>
+      <div class="tablewrap" style="margin-top:14px;">
+        <table>
+          <thead><tr><th>Fecha</th><th>Archivo</th><th>Total</th><th>OK</th><th>Con problemas</th><th>Sin notificar</th></tr></thead>
+          <tbody>
+            ${[...historial].reverse().slice(0,15).map(h => `
+              <tr>
+                <td>${escapeHtml(new Date(h.fecha).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}))}</td>
+                <td>${escapeHtml(h.archivo)}</td>
+                <td>${h.total}</td>
+                <td style="color:var(--ok)">${h.buenas}</td>
+                <td style="color:var(--bad)">${h.malas}</td>
+                <td style="color:var(--warn)">${h.sinNoti}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    if (typeof Chart === 'undefined') return;
+    if (chartHistorial) chartHistorial.destroy();
+    const ultimos = historial.slice(-20);
+    chartHistorial = new Chart(document.getElementById('graficoHistorial'), {
+      type: 'line',
+      data: {
+        labels: ultimos.map(h => new Date(h.fecha).toLocaleDateString('es-CO', {day:'2-digit', month:'2-digit'})),
+        datasets: [
+          { label: 'Con problemas', data: ultimos.map(h=>h.malas), borderColor:'#e5484d', backgroundColor:'rgba(229,72,77,0.12)', tension:.3, fill:true },
+          { label: 'OK', data: ultimos.map(h=>h.buenas), borderColor:'#2fb673', backgroundColor:'rgba(47,182,115,0.10)', tension:.3, fill:true }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { labels: { color: '#e7ebf0', font:{size:11} } } },
+        scales: {
+          x: { ticks:{color:'#8b93a1', font:{size:10}}, grid:{color:'rgba(255,255,255,0.05)'} },
+          y: { ticks:{color:'#8b93a1', font:{size:10}, precision:0}, grid:{color:'rgba(255,255,255,0.05)'}, beginAtZero:true }
+        }
+      }
+    });
+  }
+
+  // ---------- Graficos del informe ----------
+  let chartTipos = null, chartNovedades = null;
+  const PALETA_GRAFICOS = ['#3373f2','#e5484d','#d9a441','#2fb673','#8b5cf6','#06b6d4','#ec4899','#f97316'];
+
+  function renderGraficosInforme(porTipo, porNovedad) {
+    if (typeof Chart === 'undefined') return;
+
+    const tipoEntries = Object.entries(porTipo).sort((a,b)=>b[1]-a[1]);
+    const novedadEntries = Object.entries(porNovedad).sort((a,b)=>b[1]-a[1]).slice(0,8);
+
+    const opcionesComunes = {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#8b93a1', font: { size: 10.5 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { ticks: { color: '#8b93a1', font: { size: 10.5 }, precision: 0 }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+      }
+    };
+
+    if (chartTipos) chartTipos.destroy();
+    chartTipos = new Chart(document.getElementById('graficoTipos'), {
+      type: 'bar',
+      data: {
+        labels: tipoEntries.map(([t]) => ETIQUETAS_TIPO[t] || t),
+        datasets: [{ data: tipoEntries.map(([,n]) => n), backgroundColor: PALETA_GRAFICOS, borderRadius: 6 }]
+      },
+      options: opcionesComunes
+    });
+
+    if (chartNovedades) chartNovedades.destroy();
+    chartNovedades = new Chart(document.getElementById('graficoNovedades'), {
+      type: 'bar',
+      data: {
+        labels: novedadEntries.map(([nv]) => nv.length > 22 ? nv.slice(0,22)+'…' : nv),
+        datasets: [{ data: novedadEntries.map(([,n]) => n), backgroundColor: '#3373f2', borderRadius: 6 }]
+      },
+      options: { ...opcionesComunes, indexAxis: 'y' }
+    });
+  }
+
+  function listaPlanaCorregidos() {
+    const lista = [];
+    Object.keys(corregidos).forEach(clave => {
+      Object.keys(corregidos[clave]).forEach(tipo => {
+        const c = corregidos[clave][tipo];
+        if (c && typeof c === 'object' && !c.ignorado) {
+          lista.push({ clave, tipo, ...c });
+        }
+      });
+    });
+    lista.sort((a,b) => (b.fecha||'').localeCompare(a.fecha||''));
+    return lista;
+  }
+
+  function renderResponsables() {
+    const panel = document.getElementById('responsablePanel');
+    const div = document.getElementById('responsableContenido');
+    if (!panel || !div) return;
+
+    const conResponsable = ultimasFilas.filter(f => f.responsable);
+    if (!conResponsable.length) {
+      panel.style.display = 'none';
+      if (chartResponsables) { chartResponsables.destroy(); chartResponsables = null; }
+      return;
+    }
+    panel.style.display = '';
+
+    const porPersona = {};
+    conResponsable.forEach(f => {
+      const clave = claveAviso(f);
+      const corrEntry = clave ? (corregidos[clave] || {}) : {};
+      const pendientes = f.problemas.filter(p => !corrEntry[p.tipo]);
+      if (!porPersona[f.responsable]) porPersona[f.responsable] = { total: 0, conProblemas: 0 };
+      porPersona[f.responsable].total++;
+      if (pendientes.length > 0) porPersona[f.responsable].conProblemas++;
+    });
+
+    const filas = Object.entries(porPersona)
+      .map(([persona, d]) => ({ persona, ...d, pct: Math.round((d.conProblemas / d.total) * 100) }))
+      .sort((a,b) => b.conProblemas - a.conProblemas);
+
+    div.innerHTML = `
+      <table><thead><tr><th>Responsable</th><th>Total avisos</th><th>Con problemas</th><th>% con problemas</th></tr></thead>
+      <tbody>
+        ${filas.map(f => `
+          <tr>
+            <td>${escapeHtml(f.persona)}</td>
+            <td>${f.total}</td>
+            <td>${f.conProblemas > 0 ? `<span class="err-clic" style="color:var(--bad);font-weight:800;" onclick="filtrarPorResponsable('${escapeHtml(f.persona).replace(/'/g,"\\'")}')" title="Clic para ver solo los avisos de esta persona">${f.conProblemas}</span>` : `<span style="color:var(--ok)">${f.conProblemas}</span>`}</td>
+            <td>${f.pct}%</td>
+          </tr>
+        `).join('')}
+      </tbody></table>
+    `;
+
+    renderGraficoResponsables(filas);
+  }
+
+  let chartResponsables = null;
+  function renderGraficoResponsables(filas) {
+    if (typeof Chart === 'undefined') return;
+    const top = [...filas].filter(f => f.conProblemas > 0).sort((a,b)=>b.conProblemas-a.conProblemas).slice(0,10);
+    if (chartResponsables) chartResponsables.destroy();
+    if (!top.length) return;
+    chartResponsables = new Chart(document.getElementById('graficoResponsables'), {
+      type: 'bar',
+      data: {
+        labels: top.map(f => f.persona.length > 22 ? f.persona.slice(0,22)+'…' : f.persona),
+        datasets: [{ data: top.map(f => f.conProblemas), backgroundColor: '#e5484d', borderRadius: 6 }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: '#8b93a1', font: { size: 10.5 }, precision: 0 }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true },
+          y: { ticks: { color: '#8b93a1', font: { size: 10.5 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+        }
+      }
+    });
+  }
+
+  function filtrarPorResponsable(nombre) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.querySelector('.tab[data-tab="validar"]').classList.add('active');
+    document.getElementById('view-validar').classList.add('active');
+    filtroResponsableActivo = nombre;
+    filtrarPorEstadoDirecto('mal');
+  }
+
+  function renderInforme() {
+    const resumenDiv = document.getElementById('informeResumen');
+    const tablaDiv = document.getElementById('informeTabla');
+    const filtro = document.getElementById('filtroInforme').value.trim().toUpperCase();
+
+    renderResponsables();
+
+    let lista = listaPlanaCorregidos();
+
+    if (lista.length === 0) {
+      resumenDiv.innerHTML = '<div class="empty">Todavía no marcaste ningún aviso como corregido. Hacelo desde la pestaña "Validar avisos".</div>';
+      tablaDiv.innerHTML = '';
+      if (chartTipos) { chartTipos.destroy(); chartTipos = null; }
+      if (chartNovedades) { chartNovedades.destroy(); chartNovedades = null; }
+      return;
+    }
+
+    // Resumen: totales, por tipo de falla, por novedad
+    const avisosUnicos = new Set(lista.map(x => x.clave)).size;
+    const porTipo = {};
+    const porNovedad = {};
+    lista.forEach(x => {
+      porTipo[x.tipo] = (porTipo[x.tipo]||0) + 1;
+      const key = x.novedad || '(sin novedad identificada)';
+      porNovedad[key] = (porNovedad[key]||0) + 1;
+    });
+
+    const chipsTipo = Object.entries(porTipo).sort((a,b)=>b[1]-a[1])
+      .map(([t,n]) => `<span class="chip">${escapeHtml(ETIQUETAS_TIPO[t]||t)}: <b>${n}</b></span>`).join(' ');
+    const chipsNovedad = Object.entries(porNovedad).sort((a,b)=>b[1]-a[1]).slice(0,12)
+      .map(([nv,n]) => `<span class="chip">${escapeHtml(nv)}: <b>${n}</b></span>`).join(' ');
+
+    resumenDiv.innerHTML = `
+      <div class="stats" style="margin-bottom:10px;">
+        <span><b>${avisosUnicos}</b> avisos con al menos una corrección</span> ·
+        <span><b>${lista.length}</b> fallas corregidas en total</span>
+      </div>
+      <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:6px;">Por tipo de falla</div>
+      <div style="margin-bottom:14px;">${chipsTipo}</div>
+      <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:6px;">Por novedad (causa)</div>
+      <div>${chipsNovedad}</div>
+    `;
+
+    renderGraficosInforme(porTipo, porNovedad);
+
+    if (filtro) {
+      lista = lista.filter(x =>
+        (x.notificacion||'').toUpperCase().includes(filtro) ||
+        (x.orden||'').toUpperCase().includes(filtro) ||
+        (x.novedad||'').toUpperCase().includes(filtro) ||
+        (x.objeto||'').toUpperCase().includes(filtro) ||
+        (x.responsable||'').toUpperCase().includes(filtro) ||
+        (ETIQUETAS_TIPO[x.tipo]||x.tipo).toUpperCase().includes(filtro)
+      );
+    }
+
+    let html = '<table><thead><tr><th>Responsable</th><th>Notif.</th><th>Orden</th><th>Objeto / Novedad</th><th>Falla corregida</th><th>Fecha</th><th></th></tr></thead><tbody>';
+    lista.forEach(x => {
+      const fecha = x.fecha ? new Date(x.fecha).toLocaleString('es-CO', { dateStyle:'short', timeStyle:'short' }) : '';
+      html += `<tr>
+        <td><b>${escapeHtml(x.responsable || '—')}</b></td>
+        <td>${escapeHtml(x.notificacion)}</td>
+        <td>${escapeHtml(x.orden)}</td>
+        <td><b>${escapeHtml(x.objeto)}</b><br><span class="cell-sub">${escapeHtml(x.novedad)}</span></td>
+        <td><span class="badge corregido">${escapeHtml(ETIQUETAS_TIPO[x.tipo]||x.tipo)}</span></td>
+        <td class="cell-sub">${fecha}</td>
+        <td><button class="fix-btn undo" onclick="desmarcarCorregido('${x.clave}','${x.tipo}')">deshacer</button></td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    tablaDiv.innerHTML = html;
+  }
+
+  function exportarInformeCSV() {
+    const lista = listaPlanaCorregidos();
+    if (!lista.length) return;
+
+    const filas = lista.map(x => ({
+      'Responsable': x.responsable || '',
+      'Notificación': x.notificacion,
+      'Orden': x.orden,
+      'Objeto técnico': x.objeto,
+      'Generación': x.familia,
+      'Tipo de falla corregida': ETIQUETAS_TIPO[x.tipo] || x.tipo,
+      'Detalle original del error': x.texto,
+      'Fecha de corrección': x.fecha ? new Date(x.fecha).toLocaleString('es-CO') : ''
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(filas);
+    ws['!cols'] = [{wch:28},{wch:12},{wch:12},{wch:24},{wch:10},{wch:26},{wch:45},{wch:20}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Corregidos');
+
+    // Hoja resumen: solo "Por tipo de falla"
+    const porTipo = {};
+    lista.forEach(x => { porTipo[x.tipo] = (porTipo[x.tipo]||0)+1; });
+    const resumenFilas = [
+      { 'Resumen': '— Por tipo de falla —', 'Cantidad': '' },
+      ...Object.entries(porTipo).sort((a,b)=>b[1]-a[1]).map(([t,n]) => ({ 'Resumen': ETIQUETAS_TIPO[t]||t, 'Cantidad': n })),
+    ];
+    const wsResumen = XLSX.utils.json_to_sheet(resumenFilas);
+    wsResumen['!cols'] = [{wch:38},{wch:10}];
+    XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
+
+    XLSX.writeFile(wb, 'informe_avisos_corregidos_' + new Date().toISOString().slice(0,10) + '.xlsx');
+  }
+
+  let ultimasFilas = [];
+  let filtroResponsableActivo = null;
+
+  // ---------- Correcciones marcadas manualmente por el usuario ----------
+  // corregidos: { [claveAviso]: { [tipoError]: true } }
+  let corregidos = {};
+
+  // Los avisos corregidos se conservan MESES_RETENCION meses; los más viejos se borran solos.
+  const MESES_RETENCION = 3;
+  function fechaLimiteRetencion() {
+    const d = new Date();
+    d.setMonth(d.getMonth() - MESES_RETENCION);
+    return d;
+  }
+  async function purgarCorregidosViejos() {
+    const limite = fechaLimiteRetencion().toISOString();
+    let quitados = 0;
+    Object.keys(corregidos).forEach(clave => {
+      Object.keys(corregidos[clave]).forEach(tipo => {
+        const c = corregidos[clave][tipo];
+        if (c && typeof c === 'object' && c.fecha && c.fecha < limite) {
+          delete corregidos[clave][tipo];
+          quitados++;
+        }
+      });
+      if (!Object.keys(corregidos[clave]).length) delete corregidos[clave];
+    });
+    if (quitados) await guardarCorregidos();
+  }
+
+  async function cargarCorregidos() {
+    try {
+      const r = await window.storage.get('corregidos_avisos', false);
+      corregidos = JSON.parse(r.value) || {};
+    } catch (e) {
+      corregidos = {};
+    }
+    await purgarCorregidosViejos();
+  }
+
+  async function guardarCorregidos() {
+    try {
+      await window.storage.set('corregidos_avisos', JSON.stringify(corregidos), false);
+    } catch (e) {
+      console.error('Error guardando correcciones', e);
+    }
+  }
+
+  function pedirConfirmLimpiarInforme() {
+    const btn = document.getElementById('btnLimpiarInforme');
+    btn.outerHTML = `<span id="btnLimpiarInforme" class="confirm-row">
+      ¿Borrar TODO el informe de corregidos (para todos los usuarios)?
+      <button class="icon-btn del" onclick="limpiarInforme()">Sí, borrar</button>
+      <button class="icon-btn" onclick="cancelarLimpiarInforme()">Cancelar</button>
+    </span>`;
+  }
+  function cancelarLimpiarInforme() {
+    const span = document.getElementById('btnLimpiarInforme');
+    span.outerHTML = `<button class="secondary" id="btnLimpiarInforme" onclick="pedirConfirmLimpiarInforme()"><i class="bi bi-trash3"></i> Limpiar informe</button>`;
+  }
+  async function limpiarInforme() {
+    corregidos = {};
+    await guardarCorregidos();
+    cancelarLimpiarInforme();
+    renderResultadosFiltrados();
+    renderInforme();
+  }
+
+  function claveAviso(f) {
+    if (f.notificacion) return 'N:' + f.notificacion;
+    if (f.orden) return 'O:' + f.orden;
+    return null;
+  }
+
+  async function marcarCorregidoUI(clave, tipo, ignorado) {
+    if (!clave) return;
+    const f = ultimasFilas.find(x => claveAviso(x) === clave);
+    const problema = f ? f.problemas.find(p => p.tipo === tipo) : null;
+    if (!corregidos[clave]) corregidos[clave] = {};
+    corregidos[clave][tipo] = {
+      fecha: new Date().toISOString(),
+      texto: problema ? problema.texto : '',
+      notificacion: f ? f.notificacion : '',
+      orden: f ? f.orden : '',
+      objeto: f ? f.objeto : '',
+      novedad: f ? f.novedad : '',
+      familia: f ? f.familia : '',
+      responsable: f ? f.responsable : '',
+      ignorado: !!ignorado
+    };
+    await guardarCorregidos();
+    renderResultadosFiltrados();
+    renderSemaforo();
+    if (document.getElementById('view-informe') && document.getElementById('view-informe').classList.contains('active')) {
+      renderInforme();
+    }
+  }
+  function marcarIgnoradoUI(clave, tipo) { return marcarCorregidoUI(clave, tipo, true); }
+
+  async function desmarcarCorregido(clave, tipo) {
+    if (!clave || !corregidos[clave]) return;
+    delete corregidos[clave][tipo];
+    if (Object.keys(corregidos[clave]).length === 0) delete corregidos[clave];
+    await guardarCorregidos();
+    renderResultadosFiltrados();
+    renderSemaforo();
+    if (document.getElementById('view-informe') && document.getElementById('view-informe').classList.contains('active')) {
+      renderInforme();
+    }
+  }
+
+  function renderResultados(resultado) {
+    const resultadosDiv = document.getElementById('resultados');
+    const statsDiv = document.getElementById('stats');
+    const filtrosPanel = document.getElementById('filtrosResultadosPanel');
+    const semaforoPanel = document.getElementById('semaforoPanel');
+
+    if (resultado.faltanColumnas && resultado.faltanColumnas.length) {
+      resultadosDiv.innerHTML = `<div class="empty" style="color:var(--bad)">
+        No pude identificar estas columnas en el encabezado: ${resultado.faltanColumnas.join(', ')}.<br>
+        Asegurate de que la primera fila tenga los nombres de columna tal cual los ves en tu sistema/Excel.
+      </div>`;
+      statsDiv.innerHTML = '';
+      filtrosPanel.style.display = 'none';
+      semaforoPanel.style.display = 'none';
+      ultimasFilas = [];
+      actualizarBadgeSinReferencia();
+      return;
+    }
+
+    ultimasFilas = resultado.filas;
+
+    if (ultimasFilas.length === 0) {
+      resultadosDiv.innerHTML = '<div class="empty">No se encontraron filas de datos para validar.</div>';
+      statsDiv.innerHTML = '';
+      filtrosPanel.style.display = 'none';
+      semaforoPanel.style.display = 'none';
+      actualizarBadgeSinReferencia();
+      return;
+    }
+
+    filtrosPanel.style.display = '';
+    document.getElementById('filtroEstadoResultados').value = '';
+    document.getElementById('filtroNotiResultados').value = '';
+    renderSemaforo();
+    actualizarBadgeSinReferencia();
+    renderResultadosFiltrados();
+  }
+
+  function renderSemaforo() {
+    const panel = document.getElementById('semaforoPanel');
+    if (!ultimasFilas.length) { panel.style.display = 'none'; return; }
+
+    const total = ultimasFilas.length;
+    let buenos = 0;
+    ultimasFilas.forEach(f => {
+      const clave = claveAviso(f);
+      const corrEntry = clave ? (corregidos[clave] || {}) : {};
+      const pendientes = f.problemas.filter(p => !corrEntry[p.tipo]);
+      if (pendientes.length === 0) buenos++;
+    });
+    const pct = Math.round((buenos / total) * 100);
+    const clase = pct >= 90 ? 'sem-ok' : (pct >= 70 ? 'sem-warn' : 'sem-bad');
+    const icono = pct >= 90 ? 'emoji-smile-fill' : (pct >= 70 ? 'emoji-neutral-fill' : 'emoji-frown-fill');
+    const colorDot = pct >= 90 ? '🟢' : (pct >= 70 ? '🟡' : '🔴');
+
+    panel.style.display = '';
+    panel.innerHTML = `
+      <div class="semaforo ${clase}">
+        <i class="bi bi-${icono}"></i>
+        <div>
+          <div class="semaforo-pct">${colorDot} ${pct}% de tus avisos están bien</div>
+          <div class="semaforo-sub">${buenos} de ${total} sin problemas pendientes</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function actualizarBadgeSinReferencia() {
+    const badge = document.getElementById('tabSinRefBadge');
+    if (!badge) return;
+    const count = ultimasFilas.filter(f => f.sinReferencia).length;
+    if (count > 0) {
+      badge.textContent = count + ' sin referencia';
+      badge.style.display = '';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+
+  const CICLO_NOTI = ['', 'noti', 'sinnoti'];
+  const CICLO_ESTADO = ['', 'ok', 'mal', 'corregido', 'sinref'];
+
+  function ciclarFiltroNoti() {
+    const sel = document.getElementById('filtroNotiResultados');
+    const idx = CICLO_NOTI.indexOf(sel.value);
+    sel.value = CICLO_NOTI[(idx + 1) % CICLO_NOTI.length];
+    renderResultadosFiltrados();
+  }
+
+  function ciclarFiltroEstado() {
+    const sel = document.getElementById('filtroEstadoResultados');
+    const idx = CICLO_ESTADO.indexOf(sel.value);
+    sel.value = CICLO_ESTADO[(idx + 1) % CICLO_ESTADO.length];
+    renderResultadosFiltrados();
+  }
+
+  // Usadas por los numeros clicables del resumen (arriba de la tabla)
+  function filtrarPorEstadoDirecto(valor) {
+    document.getElementById('filtroEstadoResultados').value = valor;
+    document.getElementById('filtroNotiResultados').value = '';
+    document.getElementById('filtroTipoError').value = '';
+    document.getElementById('filtroDuracion').value = '';
+    renderResultadosFiltrados();
+    document.getElementById('filtrosResultadosPanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function filtrarPorNotiDirecto(valor) {
+    document.getElementById('filtroNotiResultados').value = valor;
+    document.getElementById('filtroEstadoResultados').value = '';
+    document.getElementById('filtroTipoError').value = '';
+    document.getElementById('filtroDuracion').value = '';
+    renderResultadosFiltrados();
+    document.getElementById('filtrosResultadosPanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  const CICLO_DURACION = ['', '10', '60'];
+  function ciclarFiltroDuracion() {
+    const sel = document.getElementById('filtroDuracion');
+    const idx = CICLO_DURACION.indexOf(sel.value);
+    sel.value = CICLO_DURACION[(idx + 1) % CICLO_DURACION.length];
+    renderResultadosFiltrados();
+  }
+
+  function limpiarFiltrosResultados() {
+    document.getElementById('filtroEstadoResultados').value = '';
+    document.getElementById('filtroNotiResultados').value = '';
+    document.getElementById('filtroTipoError').value = '';
+    document.getElementById('filtroDuracion').value = '';
+    filtroResponsableActivo = null;
+    renderResultadosFiltrados();
+  }
+
+  function exportarResultadosXLSX() {
+    if (!ultimasFilas.length) return;
+
+    const estadoFiltro = document.getElementById('filtroEstadoResultados').value;
+    const notiFiltro = document.getElementById('filtroNotiResultados').value;
+    const tipoErrorFiltro = document.getElementById('filtroTipoError').value;
+    const duracionFiltro = document.getElementById('filtroDuracion').value;
+
+    let filas = ultimasFilas;
+    if (notiFiltro === 'noti') filas = filas.filter(f => f.notificado);
+    if (notiFiltro === 'sinnoti') filas = filas.filter(f => !f.notificado);
+    if (estadoFiltro === 'ok') filas = filas.filter(f => f.ok);
+    if (estadoFiltro === 'mal') filas = filas.filter(f => !f.ok);
+    if (estadoFiltro === 'sinref') filas = filas.filter(f => f.sinReferencia);
+    if (tipoErrorFiltro) {
+      const tiposGrupo = tipoErrorFiltro.split(',');
+      filas = filas.filter(f => f.problemas.some(p => tiposGrupo.includes(p.tipo)));
+    }
+    if (duracionFiltro) {
+      const umbral = parseInt(duracionFiltro);
+      filas = filas.filter(f => f.duracionMinutos !== null && f.duracionMinutos !== undefined && f.duracionMinutos > umbral);
+    }
+
+    if (!filas.length) return;
+
+    const data = filas.map(f => {
+      const clave = claveAviso(f);
+      const corrEntry = clave ? (corregidos[clave] || {}) : {};
+      const pendientes = f.problemas.filter(p => !corrEntry[p.tipo]);
+      return {
+        'Responsable': f.responsable || '',
+        'Notificación': f.notificacion,
+        'Orden': f.orden,
+        'Denominación objeto técnico': f.objeto,
+        'Texto breve': f.textoBreve,
+        'Denominación conjunto': f.denomConjunto,
+        'Conjunto (código)': f.conjuntoCodigo,
+        'Pto.trabajo responsable': f.ptoTrabajo,
+        'Status del sistema': f.status,
+        'Duración (min)': (f.duracionMinutos !== null && f.duracionMinutos !== undefined) ? Math.round(f.duracionMinutos) : '',
+        'Notificado': f.notificado ? 'Sí' : 'No',
+        'Estado': pendientes.length ? 'Revisar' : (f.problemas.length ? 'Corregido' : (f.sinReferencia ? 'Sin referencia' : 'OK')),
+        'Fallas pendientes': pendientes.map(p => ETIQUETAS_TIPO[p.tipo] || p.tipo).join(' | '),
+        'Detalle de fallas pendientes': pendientes.map(p => p.texto).join(' | ')
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    ws['!cols'] = [{wch:26},{wch:12},{wch:12},{wch:22},{wch:28},{wch:26},{wch:12},{wch:14},{wch:22},{wch:10},{wch:14},{wch:26},{wch:50}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Validación de avisos');
+    XLSX.writeFile(wb, 'validacion_avisos_' + new Date().toISOString().slice(0,10) + '.xlsx');
+  }
+
+  function renderResultadosFiltrados() {
+    const resultadosDiv = document.getElementById('resultados');
+    const statsDiv = document.getElementById('stats');
+
+    const estadoFiltro = document.getElementById('filtroEstadoResultados').value;
+    const notiFiltro = document.getElementById('filtroNotiResultados').value;
+    const tipoErrorFiltro = document.getElementById('filtroTipoError').value;
+    const duracionFiltro = document.getElementById('filtroDuracion').value;
+
+    document.getElementById('filtroEstadoResultados').classList.toggle('filtro-activo', !!estadoFiltro);
+    document.getElementById('filtroNotiResultados').classList.toggle('filtro-activo', !!notiFiltro);
+    document.getElementById('filtroTipoError').classList.toggle('filtro-activo', !!tipoErrorFiltro);
+    document.getElementById('filtroDuracion').classList.toggle('filtro-activo', !!duracionFiltro);
+
+    const total = ultimasFilas.length;
+    const pendientesPorFila = ultimasFilas.map(f => {
+      const clave = claveAviso(f);
+      const corrEntry = clave ? (corregidos[clave] || {}) : {};
+      return f.problemas.filter(p => !corrEntry[p.tipo]).length;
+    });
+    // Un aviso solo cuenta como "corregido" si tiene al menos una correccion REAL
+    // (no ignorada) y nada pendiente. Si todo lo que se resolvio fue "ignorado",
+    // para las cuentas es como si el aviso nunca hubiera tenido ese problema: pasa a OK.
+    const tieneCorreccionRealPorFila = ultimasFilas.map(f => {
+      const clave = claveAviso(f);
+      const corrEntry = clave ? (corregidos[clave] || {}) : {};
+      return f.problemas.some(p => corrEntry[p.tipo] && !corrEntry[p.tipo].ignorado);
+    });
+    const malas = ultimasFilas.filter((f,i) => f.error || pendientesPorFila[i] > 0).length;
+    const corregidasCount = ultimasFilas.filter((f,i) => pendientesPorFila[i] === 0 && tieneCorreccionRealPorFila[i]).length;
+    const buenas = total - malas - corregidasCount;
+    const sinRef = ultimasFilas.filter(f => f.sinReferencia).length;
+    const sinNoti = ultimasFilas.filter(f => !f.notificado).length;
+
+    statsDiv.innerHTML = `<span class="stat-clic" onclick="filtrarPorEstadoDirecto('')"><b>${total}</b> avisos</span> · <span class="stat-clic" style="color:var(--ok)" onclick="filtrarPorEstadoDirecto('ok')"><b>${buenas}</b> OK</span> · <span class="stat-clic" style="color:var(--bad)" onclick="filtrarPorEstadoDirecto('mal')"><b>${malas}</b> con problemas pendientes</span>` +
+      (corregidasCount ? ` · <span class="stat-clic" style="color:var(--accent)" onclick="filtrarPorEstadoDirecto('corregido')"><b>${corregidasCount}</b> corregidos ✓</span>` : '') +
+      (sinRef ? ` · <span class="stat-clic" style="color:var(--warn)" onclick="filtrarPorEstadoDirecto('sinref')"><b>${sinRef}</b> sin referencia en tu tabla</span>` : '') +
+      (sinNoti ? ` · <span class="stat-clic" style="color:var(--bad)" onclick="filtrarPorNotiDirecto('sinnoti')"><b>${sinNoti}</b> sin notificar</span>` : '') +
+      (filtroResponsableActivo ? ` · <span class="badge corregido">Filtrando: ${escapeHtml(filtroResponsableActivo)} <span class="stat-clic" style="margin-left:4px;" onclick="filtroResponsableActivo=null;renderResultadosFiltrados();">✕</span></span>` : '');
+
+    let filas = ultimasFilas;
+    if (estadoFiltro === 'ok') {
+      filas = filas.filter(f => {
+        const clave = claveAviso(f);
+        const corrEntry = clave ? (corregidos[clave] || {}) : {};
+        const pendientes = f.problemas.filter(p => !corrEntry[p.tipo]);
+        return pendientes.length === 0 && f.problemas.length === 0 && !f.sinReferencia;
+      });
+    } else if (estadoFiltro === 'mal') {
+      filas = filas.filter(f => {
+        const clave = claveAviso(f);
+        const corrEntry = clave ? (corregidos[clave] || {}) : {};
+        return f.error || f.problemas.some(p => !corrEntry[p.tipo]);
+      });
+    } else if (estadoFiltro === 'corregido') {
+      filas = filas.filter(f => {
+        const clave = claveAviso(f);
+        const corrEntry = clave ? (corregidos[clave] || {}) : {};
+        const pendientes = f.problemas.filter(p => !corrEntry[p.tipo]);
+        return f.problemas.length > 0 && pendientes.length === 0;
+      });
+    } else if (estadoFiltro === 'sinref') {
+      filas = filas.filter(f => f.sinReferencia);
+    }
+
+    if (notiFiltro === 'noti') filas = filas.filter(f => f.notificado);
+    else if (notiFiltro === 'sinnoti') filas = filas.filter(f => !f.notificado);
+
+    if (tipoErrorFiltro) {
+      const tiposGrupo = tipoErrorFiltro.split(',');
+      filas = filas.filter(f => f.problemas.some(p => tiposGrupo.includes(p.tipo)));
+    }
+
+    if (duracionFiltro) {
+      const umbral = parseInt(duracionFiltro);
+      filas = filas.filter(f => f.duracionMinutos !== null && f.duracionMinutos !== undefined && f.duracionMinutos > umbral);
+    }
+
+    if (filtroResponsableActivo) {
+      filas = filas.filter(f => f.responsable === filtroResponsableActivo);
+    }
+
+    if (filas.length === 0) {
+      resultadosDiv.innerHTML = '<div class="empty">Ningún aviso coincide con el filtro.</div>';
+      return;
+    }
+
+    const etiquetasNoti = { '': '', 'noti': 'Solo notificados', 'sinnoti': 'Solo sin notificar' };
+    const etiquetasEstado = { '': '', 'ok': 'Solo OK', 'mal': 'Solo con problemas', 'sinref': 'Solo sin referencia' };
+    const thNotiClase = 'filterable' + (notiFiltro ? ' active-filter' : '');
+    const thEstadoClase = 'filterable' + (estadoFiltro ? ' active-filter' : '');
+    const thNotiSub = notiFiltro ? `<span class="subfiltro">${etiquetasNoti[notiFiltro]}</span>` : '';
+    const thEstadoSub = estadoFiltro ? `<span class="subfiltro">${etiquetasEstado[estadoFiltro]}</span>` : '';
+
+    const tipoActivo = tipoErrorFiltro;
+    const thClase = (grupo) => 'filterable' + (tipoActivo === grupo ? ' active-filter' : '');
+
+    const thDuracionClase = 'filterable' + (duracionFiltro ? ' active-filter' : '');
+    const thDuracionSub = duracionFiltro ? `<span class="subfiltro">&gt; ${duracionFiltro} min</span>` : '';
+
+    let html = `<table><thead><tr><th>#</th><th>Notif.</th><th>Responsable</th>
+      <th class="${thClase('orden')}" onclick="filtrarPorTipoError('orden')" title="Clic para ver solo avisos sin Orden">Orden<span class="arrow">▾</span></th>
+      <th class="${thClase('textobreve,redaccion')}" onclick="filtrarPorTipoError('textobreve,redaccion')" title="Clic para ver solo errores de código/redacción">Objeto / Texto breve<span class="arrow">▾</span></th>
+      <th class="${thClase('conjunto')}" onclick="filtrarPorTipoError('conjunto')" title="Clic para ver solo conjuntos incorrectos">Conjunto<span class="arrow">▾</span></th>
+      <th class="${thClase('ptotrabajo')}" onclick="filtrarPorTipoError('ptotrabajo')" title="Clic para ver solo Pto.Trab incorrecto">Pto.Trab<span class="arrow">▾</span></th>
+      <th class="${thClase('status,nliq')}" onclick="filtrarPorTipoError('status,nliq')" title="Clic para ver solo Status/NLIQ incorrecto">Status<span class="arrow">▾</span></th>
+      <th class="${thClase('estinst')}" onclick="filtrarPorTipoError('estinst')" title="Clic para ver solo ETM incorrecto">ETM<span class="arrow">▾</span></th>
+      <th class="${thDuracionClase}" onclick="ciclarFiltroDuracion()" title="Clic para filtrar por duración">Duración<span class="arrow">▾</span>${thDuracionSub}</th>
+      <th class="${thNotiClase}" onclick="ciclarFiltroNoti()" title="Clic para filtrar por notificación">Notificado<span class="arrow">▾</span>${thNotiSub}</th>
+      <th class="${thEstadoClase}" onclick="ciclarFiltroEstado()" title="Clic para filtrar por estado">Estado<span class="arrow">▾</span>${thEstadoSub}</th>
+      </tr></thead><tbody>`;
+
+    window.sugerenciasReferenciaActuales = [];
+    window.sugerenciasRedaccionActuales = [];
+
+    filas.forEach(f => {
+      const clave = claveAviso(f);
+      const corrEntry = clave ? (corregidos[clave] || {}) : {};
+      const pendientes = f.problemas.filter(p => !corrEntry[p.tipo]);
+      const tieneCorreccionReal = f.problemas.some(p => corrEntry[p.tipo] && !corrEntry[p.tipo].ignorado);
+      const todoCorregido = pendientes.length === 0 && tieneCorreccionReal;
+
+      const claseFila = pendientes.length ? 'bad' : (f.ok ? (f.sinReferencia ? 'warn' : '') : '');
+      const badge = pendientes.length
+        ? '<span class="badge bad">Revisar</span>'
+        : (todoCorregido
+            ? '<span class="badge corregido">Corregido</span>'
+            : (f.sinReferencia ? '<span class="badge warn">Sin referencia</span>' : '<span class="badge ok">OK</span>'));
+      const badgeNoti = (f.notificado || corrEntry['status'])
+        ? '<span class="badge ok">Notificado</span>'
+        : '<span class="badge bad">Sin notificar</span>';
+
+      // Arma el bloque de error(es) que va debajo de una celda especifica (en vez de
+      // amontonar todo bajo "Estado"). Cada error queda junto a la columna a la que pertenece.
+      function bloqueErrores(lista) {
+        if (!lista.length) return '';
+        return `<div class="cell-errores">${lista.map(p => {
+          const marcado = !!corrEntry[p.tipo];
+          const tag = `<span class="tag-error">${escapeHtml(ETIQUETAS_TIPO[p.tipo] || p.tipo)}</span>`;
+          let botonExtra = '';
+          const sugerencia = p.sugerenciaValida || (p.tipo === 'redaccion' ? f.sugerenciaRedaccion : null);
+          if (sugerencia && !marcado) {
+            const idxRed = window.sugerenciasRedaccionActuales.length;
+            window.sugerenciasRedaccionActuales.push(sugerencia);
+            botonExtra = ` <button class="fix-btn" style="border-color:var(--accent);color:var(--accent);" onclick="irAAgregarNovedadValida(${idxRed})" title="Si esto NO es un error, marcalo como valido">no es un error, marcar como válida</button>`;
+          }
+          if (marcado) {
+            const entradaCorr = corrEntry[p.tipo];
+            const esIgnorado = entradaCorr && entradaCorr.ignorado;
+            const claseLinea = esIgnorado ? 'err-ignorado' : 'err-corregido';
+            const etiqueta = esIgnorado ? 'Ignorado' : '✓';
+            return `<div class="cell-err-item ${claseLinea}">${etiqueta} ${tag} ${escapeHtml(p.texto)}${clave ? ` <button class="fix-btn undo" onclick="desmarcarCorregido('${clave}','${p.tipo}')" title="Deshacer">deshacer</button>` : ''}</div>`;
+          }
+          return `<div class="cell-err-item err-pendiente">${tag} <span class="err-clic" onclick="filtrarPorTipoError('${p.tipo}')" title="Clic para ver solo este tipo de error">${escapeHtml(p.texto)}</span>${clave ? ` <button class="fix-btn" onclick="marcarCorregidoUI('${clave}','${p.tipo}')" title="Marcar como ya corregido en el sistema real">✓ marcar corregido</button> <button class="fix-btn ignore" onclick="marcarIgnoradoUI('${clave}','${p.tipo}')" title="Esto no es un error real, ignorarlo y no contarlo">🚫 ignorar</button>` : ''}${botonExtra}</div>`;
+        }).join('')}</div>`;
+      }
+
+      const probOrden = f.problemas.filter(p => p.tipo === 'orden');
+      const probObjeto = f.problemas.filter(p => p.tipo === 'textobreve' || p.tipo === 'redaccion' || p.tipo === 'motivo');
+      const probConjunto = f.problemas.filter(p => p.tipo === 'conjunto');
+      const probPto = f.problemas.filter(p => p.tipo === 'ptotrabajo');
+      const probStatus = f.problemas.filter(p => p.tipo === 'status' || p.tipo === 'nliq' || p.tipo === 'statususuario');
+      const probEtm = f.problemas.filter(p => p.tipo === 'estinst');
+
+      const tienePtoTrabajoError = probPto.some(p => !corrEntry[p.tipo]);
+      const tieneStatusError = probStatus.some(p => !corrEntry[p.tipo]);
+      const tieneEtmError = probEtm.some(p => !corrEntry[p.tipo]);
+      const tieneRedaccionError = f.problemas.some(p => p.tipo === 'redaccion') && !corrEntry['redaccion'];
+      const tieneTextoBreveError = (f.problemas.some(p => p.tipo === 'textobreve') && !corrEntry['textobreve']) || tieneRedaccionError || probObjeto.some(p => p.tipo === 'motivo' && !corrEntry['motivo']);
+      const clasePtoTrab = tienePtoTrabajoError ? 'cell-bad' : 'cell-ok';
+      const claseStatus = tieneStatusError ? 'cell-bad' : 'cell-ok';
+      const claseEtm = tieneEtmError ? 'cell-bad' : 'cell-ok';
+      const claseObjeto = tieneTextoBreveError ? 'cell-bad' : 'cell-ok';
+
+      let celdaObjetoTexto;
+      if (f.diffHtml && f.problemas.some(p => p.tipo === 'textobreve') && !corrEntry['textobreve']) {
+        celdaObjetoTexto = `<b>${f.diffHtml.objetoHtml}</b><br><span class="cell-sub">${f.diffHtml.textoBreveHtml}</span>`;
+      } else if (f.diffNovedadHtml && tieneRedaccionError) {
+        const objTokens = (f.objeto || '').replace(/#/g,'').trim().split(/\s+/).filter(Boolean).length;
+        const textoTokens = (f.textoBreve || '').trim().split(/\s+/).filter(Boolean);
+        const codigoParte = textoTokens.slice(0, objTokens).map(escapeHtml).join(' ');
+        celdaObjetoTexto = `<b>${escapeHtml(f.objeto)}</b><br><span class="cell-sub">${codigoParte} ${f.diffNovedadHtml}</span>`;
+      } else {
+        celdaObjetoTexto = `<b>${escapeHtml(f.objeto)}</b><br><span class="cell-sub">${escapeHtml(f.textoBreve)}</span>`;
+      }
+
+      // Duracion: si sabemos que es Remoto o Sitio, usamos el umbral especifico de cada uno
+      // (remoto <=10 verde, >10 rojo | sitio <=60 verde, >60 rojo). Es solo visual, sin
+      // mensaje de texto aparte -- el color y los minutos ya dicen todo.
+      let celdaDuracion = '<span style="color:var(--muted)">—</span>';
+      if (f.duracionMinutos !== null && f.duracionMinutos !== undefined) {
+        const mins = Math.round(f.duracionMinutos);
+        let claseDur, icono;
+        if (f.tipoCorrectivo === 'remoto') {
+          claseDur = mins > 10 ? 'bad' : 'ok';
+          icono = mins > 10 ? 'exclamation-octagon-fill' : 'check-circle-fill';
+        } else if (f.tipoCorrectivo === 'sitio') {
+          claseDur = mins > 60 ? 'bad' : 'ok';
+          icono = mins > 60 ? 'exclamation-octagon-fill' : 'check-circle-fill';
+        } else {
+          const critico = mins >= 60, bien = mins <= 5;
+          claseDur = critico ? 'bad' : (bien ? 'ok' : 'warn');
+          icono = critico ? 'exclamation-octagon-fill' : (bien ? 'check-circle-fill' : 'exclamation-triangle-fill');
+        }
+        celdaDuracion = `<span class="badge ${claseDur}"><i class="bi bi-${icono}"></i> ${mins} min</span>`;
+      }
+
+      let bloqueSinReferencia = '';
+      if (f.sinReferencia) {
+        let idxSug = -1;
+        if (f.sugerenciaReferencia) {
+          idxSug = window.sugerenciasReferenciaActuales.length;
+          window.sugerenciasReferenciaActuales.push(f.sugerenciaReferencia);
+        }
+        bloqueSinReferencia = `<div class="cell-errores"><div class="cell-err-item" style="color:var(--warn)">
+          <span class="tag-error" style="background:rgba(217,164,65,0.16);border-color:rgba(217,164,65,0.4);color:var(--warn);">Sin referencia</span>
+          No hay una regla definida en tu tabla para esta novedad.
+          ${idxSug >= 0 ? `<button class="fix-btn" style="border-color:var(--warn);color:var(--warn);" onclick="irAAgregarReferencia(${idxSug})"><i class="bi bi-plus-lg"></i> agregar a la tabla</button>` : ''}
+        </div></div>`;
+      }
+
+      html += `<tr class="${claseFila}">
+        <td>${f.fila}</td>
+        <td>${escapeHtml(f.notificacion)}</td>
+        <td>${escapeHtml(f.responsable) || '<span style="color:var(--muted)">—</span>'}</td>
+        <td>${escapeHtml(f.orden) || '<span style="color:var(--bad)">(vacío)</span>'}${bloqueErrores(probOrden)}</td>
+        <td class="${claseObjeto}">${celdaObjetoTexto}${bloqueErrores(probObjeto)}${bloqueSinReferencia}</td>
+        <td>${escapeHtml(f.denomConjunto)}<br><span style="color:var(--muted)">${escapeHtml(f.conjuntoCodigo)}</span>${bloqueErrores(probConjunto)}</td>
+        <td class="${clasePtoTrab}">${escapeHtml(f.ptoTrabajo)}${bloqueErrores(probPto)}</td>
+        <td class="${claseStatus}">${escapeHtml(f.status)}${bloqueErrores(probStatus)}</td>
+        <td class="${claseEtm}">${f.tieneEtm ? (bloqueErrores(probEtm) || '<span class="badge ok">2</span>') : '<span style="color:var(--muted)">—</span>'}</td>
+        <td>${celdaDuracion}</td>
+        <td>${badgeNoti}</td>
+        <td>${badge}</td>
+      </tr>`;
+    });
+
+    html += '</tbody></table>';
+    resultadosDiv.innerHTML = html;
+  }
+
+  function filtrarPorTipoError(tipo) {
+    const sel = document.getElementById('filtroTipoError');
+    sel.value = (sel.value === tipo) ? '' : tipo;
+    document.getElementById('filtroEstadoResultados').value = '';
+    document.getElementById('filtroNotiResultados').value = '';
+    renderResultadosFiltrados();
+    document.getElementById('filtrosResultadosPanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function limpiarResultados() {
+    ultimasFilas = [];
+    ultimoFilasCrudas = null;
+    document.getElementById('fileInput').value = '';
+    document.getElementById('fileHint').textContent = '';
+    document.getElementById('stats').innerHTML = '';
+    document.getElementById('filtrosResultadosPanel').style.display = 'none';
+    document.getElementById('semaforoPanel').style.display = 'none';
+    document.getElementById('resultados').innerHTML = '<div class="empty">Todavía no hay resultados. Subí un archivo Excel para empezar.</div>';
+    actualizarBadgeSinReferencia();
+  }
+
+  let ultimoFilasCrudas = null;
+
+  function cargarExcel(file) {
+    if (!file) return;
+    const hint = document.getElementById('fileHint');
+    hint.textContent = 'Leyendo ' + file.name + '...';
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: 'array' });
+        const hoja = wb.Sheets[wb.SheetNames[0]];
+        const filasCrudas = XLSX.utils.sheet_to_json(hoja, { header: 1, defval: '', raw: false });
+        ultimoFilasCrudas = filasCrudas;
+        const resultado = procesarFilas(filasCrudas);
+        renderResultados(resultado);
+        hint.textContent = file.name + ' — ' + resultado.filas.length + ' filas procesadas';
+        guardarSnapshotHistorial(file.name, resultado.filas);
+      } catch (err) {
+        hint.textContent = 'Error leyendo el archivo: ' + err.message;
+        console.error(err);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  // Vuelve a correr la validacion sobre el mismo archivo cargado, sin tener que
+  // volver a subirlo -- se llama cada vez que se agrega/edita/borra algo en
+  // cualquiera de las tablas de referencia, para que el resultado se actualice solo.
+  function revalidarSiHayArchivo() {
+    if (!ultimoFilasCrudas) return;
+    const resultado = procesarFilas(ultimoFilasCrudas);
+    ultimasFilas = resultado.filas;
+    renderResultadosFiltrados();
+    renderSemaforo();
+    actualizarBadgeSinReferencia();
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+  }
+  function escapeAttr(str) {
+    return escapeHtml(str).replace(/"/g, '&quot;');
+  }
+
+  // ---------- Drag & drop del Excel ----------
+  (function initDropZone() {
+    const zone = document.getElementById('dropZone');
+    const hint = document.getElementById('fileHint');
+    let dragCounter = 0;
+
+    ['dragenter', 'dragover'].forEach(evt => {
+      zone.addEventListener(evt, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (evt === 'dragenter') dragCounter++;
+        zone.classList.add('dragover');
+      });
+    });
+
+    ['dragleave', 'dragend'].forEach(evt => {
+      zone.addEventListener(evt, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (evt === 'dragleave') {
+          dragCounter--;
+          if (dragCounter > 0) return;
+        }
+        dragCounter = 0;
+        zone.classList.remove('dragover');
+      });
+    });
+
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter = 0;
+      zone.classList.remove('dragover');
+      const archivos = e.dataTransfer.files;
+      if (!archivos || !archivos.length) return;
+      const file = archivos[0];
+      if (!/\.(xlsx|xls)$/i.test(file.name)) {
+        hint.textContent = 'Ese archivo no es un Excel (.xlsx/.xls)';
+        return;
+      }
+      cargarExcel(file);
+    });
+
+    // Evitar que el navegador abra el archivo si sueltan fuera de la dropzone
+    ['dragover', 'drop'].forEach(evt => {
+      document.addEventListener(evt, (e) => e.preventDefault());
+    });
+  })();
+
+  cargarReferencia();
+  cargarCorregidos();
+  cargarDiccionarioTypos();
+  cargarHistorial();
+  cargarReferenciaEstatus();
+  cargarReferenciaMotivo();
+
+  // ---------- Sincronizar con cambios de otras personas ----------
+  async function refrescarDesdeNube() {
+    let cambiadas;
+    try { cambiadas = await window.storage.refresh(); } catch (e) { return; }
+    if (!cambiadas.length) return;
+    if (cambiadas.includes('tabla_referencia')) await cargarReferencia();
+    if (cambiadas.includes('referencia_estatus')) await cargarReferenciaEstatus();
+    if (cambiadas.includes('referencia_motivo')) await cargarReferenciaMotivo();
+    if (cambiadas.includes('diccionario_typos')) await cargarDiccionarioTypos();
+    if (cambiadas.includes('historial_validaciones')) {
+      await cargarHistorial();
+      if (document.getElementById('view-informe').classList.contains('active')) renderHistorial();
+    }
+    if (cambiadas.includes('corregidos_avisos')) {
+      await cargarCorregidos();
+      if (document.getElementById('view-informe').classList.contains('active')) renderInforme();
+    }
+    revalidarSiHayArchivo();
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refrescarDesdeNube();
+  });
+  setInterval(() => { if (document.visibilityState === 'visible') refrescarDesdeNube(); }, 60000);
+</script>
+</body>
+</html>
