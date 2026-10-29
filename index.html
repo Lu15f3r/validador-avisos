@@ -355,9 +355,10 @@
         <select id="filtroTipoError" onchange="renderResultadosFiltrados()">
           <option value="">Tipo de error: todos</option>
           <option value="orden">Falta la Orden</option>
-          <option value="sinposicion,posiciones">Posiciones (sin posición / cantidad errada)</option>
+          <option value="sinposicion,posiciones,responsableduplicado">Posiciones (sin posición / cantidad / responsable duplicado)</option>
           <option value="sinposicion">— Solo sin posición</option>
           <option value="posiciones">— Solo cantidad errada (Remoto 2 / Sitio 3)</option>
+          <option value="responsableduplicado">— Solo responsable duplicado</option>
           <option value="textobreve,redaccion">Descripción errada (código o redacción)</option>
           <option value="textobreve">— Solo código no coincide</option>
           <option value="redaccion">— Solo redacción no coincide</option>
@@ -744,6 +745,7 @@
     redaccion: 'Descripción errada',
     sinposicion: 'Sin posición',
     posiciones: 'Posiciones erradas',
+    responsableduplicado: 'Responsable duplicado',
     conjunto: 'Conjunto errado',
     ptotrabajo: 'Pto.trabajo errado',
     status: 'Sin notificar',
@@ -1917,16 +1919,32 @@
         const posReales = ipFila.detalle.map(d => d.pos).filter(Boolean).join(',');
         const nombreTipo = ipFila.tipo === 'remoto' ? 'Remoto' : (ipFila.tipo === 'sitio' ? 'Sitio' : null);
         if (ipFila.filas < 2) {
-          problemas.push({ tipo: 'sinposicion', texto: `Sin segunda posición — la notificación ${notificacion} aparece ${ipFila.filas} sola vez en el Excel${nombreTipo ? ` (${nombreTipo}: debe tener ${ipFila.tipo === 'remoto' ? '2 posiciones (1,2)' : '3 posiciones (1,2,3)'})` : ''}` });
+          problemas.push({ tipo: 'sinposicion', texto: 'Sin segunda posición' });
         } else if (nombreTipo) {
           const esperado = ipFila.tipo === 'remoto' ? 2 : 3;
           const posEsperadas = esperado === 2 ? '1,2' : '1,2,3';
-          const mal = ipFila.filas !== esperado || (tieneColPos && posReales !== posEsperadas);
-          if (mal) {
-            problemas.push({ tipo: 'posiciones', texto: `Aviso ${nombreTipo}: debe tener ${esperado} posiciones (${posEsperadas}) y tiene ${ipFila.filas}${tieneColPos ? ` (${posReales})` : ''}` });
+          if (ipFila.filas > esperado) {
+            problemas.push({ tipo: 'posiciones', texto: `Solo debe tener ${esperado === 2 ? 'dos' : 'tres'} posiciones` });
+          } else if (ipFila.filas < esperado) {
+            problemas.push({ tipo: 'posiciones', texto: 'Sin tercera posición — falta una posición' });
+          } else if (tieneColPos && posReales !== posEsperadas) {
+            problemas.push({ tipo: 'posiciones', texto: `Posiciones incorrectas: tiene ${posReales} y debe tener ${posEsperadas}` });
           }
         } else {
           problemas.push({ tipo: 'posiciones', texto: `No se identifica Remoto/Sitio en "Texto código parte objeto" — la posición 1 debe decir "Correctivo Remoto" o "Correctivo Sito"` });
+        }
+
+        // Responsable duplicado: el mismo nombre en dos o más posiciones (se ignora la fila "Correctivo ...")
+        const vistosNombres = {};
+        ipFila.detalle.forEach(d => {
+          const n = normalizarTexto(d.txt || '').replace(/\s+/g,' ').trim();
+          if (!n || n.startsWith('CORRECTIVO')) return;
+          (vistosNombres[n] = vistosNombres[n] || []).push(d);
+        });
+        const dups = Object.values(vistosNombres).filter(arr => arr.length > 1);
+        if (dups.length) {
+          const detalleDup = dups.map(arr => `${arr[0].txt} (posiciones ${arr.map(x => x.pos || '?').join(' y ')})`).join('; ');
+          problemas.push({ tipo: 'responsableduplicado', texto: `Responsable duplicado: ${detalleDup}` });
         }
       }
 
@@ -2798,7 +2816,7 @@
     const thDuracionSub = duracionFiltro ? `<span class="subfiltro">&gt; ${duracionFiltro} min</span>` : '';
 
     let html = `<table><thead><tr><th>#</th><th>Notif.</th><th>Responsable</th>
-      <th class="${thClase('sinposicion,posiciones')}" onclick="filtrarPorTipoError('sinposicion,posiciones')" title="Clic para ver solo avisos con posiciones erradas">Posición / Parte objeto<span class="arrow">▾</span></th>
+      <th class="${thClase('sinposicion,posiciones,responsableduplicado')}" onclick="filtrarPorTipoError('sinposicion,posiciones,responsableduplicado')" title="Clic para ver solo avisos con posiciones erradas">Posición / Parte objeto<span class="arrow">▾</span></th>
       <th class="${thClase('orden')}" onclick="filtrarPorTipoError('orden')" title="Clic para ver solo avisos sin Orden">Orden<span class="arrow">▾</span></th>
       <th class="${thClase('textobreve,redaccion')}" onclick="filtrarPorTipoError('textobreve,redaccion')" title="Clic para ver solo errores de código/redacción">Objeto / Texto breve<span class="arrow">▾</span></th>
       <th class="${thClase('conjunto')}" onclick="filtrarPorTipoError('conjunto')" title="Clic para ver solo conjuntos incorrectos">Conjunto<span class="arrow">▾</span></th>
@@ -2856,7 +2874,7 @@
       }
 
       const probOrden = f.problemas.filter(p => p.tipo === 'orden');
-      const probPos = f.problemas.filter(p => p.tipo === 'sinposicion' || p.tipo === 'posiciones');
+      const probPos = f.problemas.filter(p => p.tipo === 'sinposicion' || p.tipo === 'posiciones' || p.tipo === 'responsableduplicado');
       const probObjeto = f.problemas.filter(p => p.tipo === 'textobreve' || p.tipo === 'redaccion' || p.tipo === 'motivo');
       const probConjunto = f.problemas.filter(p => p.tipo === 'conjunto');
       const probPto = f.problemas.filter(p => p.tipo === 'ptotrabajo');
