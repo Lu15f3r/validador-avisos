@@ -355,10 +355,11 @@
         <select id="filtroTipoError" onchange="renderResultadosFiltrados()">
           <option value="">Tipo de error: todos</option>
           <option value="orden">Falta la Orden</option>
-          <option value="sinposicion,posiciones,responsableduplicado">Posiciones (sin posición / cantidad / responsable duplicado)</option>
+          <option value="sinposicion,posiciones,responsableduplicado,sinresponsable">Posiciones (sin posición / cantidad / responsable)</option>
           <option value="sinposicion">— Solo sin posición</option>
           <option value="posiciones">— Solo cantidad errada (Remoto 2 / Sitio 3)</option>
           <option value="responsableduplicado">— Solo responsable duplicado</option>
+          <option value="sinresponsable">— Solo sin responsable</option>
           <option value="textobreve,redaccion">Descripción errada (código o redacción)</option>
           <option value="textobreve">— Solo código no coincide</option>
           <option value="redaccion">— Solo redacción no coincide</option>
@@ -746,6 +747,7 @@
     sinposicion: 'Sin posición',
     posiciones: 'Posiciones erradas',
     responsableduplicado: 'Responsable duplicado',
+    sinresponsable: 'Sin responsable',
     conjunto: 'Conjunto errado',
     ptotrabajo: 'Pto.trabajo errado',
     status: 'Sin notificar',
@@ -1567,7 +1569,7 @@
     // Columnas opcionales para calcular la duracion del aviso (no son obligatorias)
     idx.horaInicioReal = find(x => x.includes('HORA') && x.includes('INICIO') && x.includes('REAL'));
     idx.finReal = find(x => (x.includes('FIN') && x.includes('REAL')) || x === 'FIN REAL');
-    idx.responsable = find(x => x.includes('AUTOR') || x.includes('CREADO'));
+    idx.responsable = (() => { let i = find(x => x === 'CREADO' || x.startsWith('AUTOR')); if (i === -1) i = find(x => x.includes('CREADO') && !x.includes('LAS') && !x.includes('HORA')); return i; })();
 
     return idx;
   }
@@ -1592,7 +1594,7 @@
     idx.estInst = find(x => x.includes('EST') && x.includes('INST'));
     idx.horaInicioReal = find(x => x.includes('HORA') && x.includes('INICIO'));
     idx.finReal = find(x => x.includes('HORA') && x.includes('FIN'));
-    idx.responsable = find(x => x.includes('AUTOR') || x.includes('CREADO'));
+    idx.responsable = (() => { let i = find(x => x === 'CREADO' || x.startsWith('AUTOR')); if (i === -1) i = find(x => x.includes('CREADO') && !x.includes('LAS') && !x.includes('HORA')); return i; })();
     // Columnas opcionales: clasificacion del motivo y duracion de parada (no todos los
     // archivos las traen, asi que no son obligatorias)
     idx.grupoCodigos = find(x => x.includes('GRUPO') && x.includes('CODIGO'));
@@ -1943,8 +1945,12 @@
         });
         const dups = Object.values(vistosNombres).filter(arr => arr.length > 1);
         if (dups.length) {
-          const detalleDup = dups.map(arr => `${arr[0].txt} (posiciones ${arr.map(x => x.pos || '?').join(' y ')})`).join('; ');
-          problemas.push({ tipo: 'responsableduplicado', texto: `Responsable duplicado: ${detalleDup}` });
+          problemas.push({ tipo: 'responsableduplicado', texto: 'Responsable duplicado' });
+        }
+        // Sin responsable: hay posiciones adicionales pero alguna no trae nombre
+        if (ipFila.filas >= 2) {
+          const sinNombre = ipFila.detalle.some(d => !(d.txt || '').trim());
+          if (sinNombre) problemas.push({ tipo: 'sinresponsable', texto: 'Sin responsable' });
         }
       }
 
@@ -2816,7 +2822,7 @@
     const thDuracionSub = duracionFiltro ? `<span class="subfiltro">&gt; ${duracionFiltro} min</span>` : '';
 
     let html = `<table><thead><tr><th>#</th><th>Notif.</th><th>Responsable</th>
-      <th class="${thClase('sinposicion,posiciones,responsableduplicado')}" onclick="filtrarPorTipoError('sinposicion,posiciones,responsableduplicado')" title="Clic para ver solo avisos con posiciones erradas">Posición / Parte objeto<span class="arrow">▾</span></th>
+      <th class="${thClase('sinposicion,posiciones,responsableduplicado,sinresponsable')}" onclick="filtrarPorTipoError('sinposicion,posiciones,responsableduplicado,sinresponsable')" title="Clic para ver solo avisos con posiciones erradas">Posición / Parte objeto<span class="arrow">▾</span></th>
       <th class="${thClase('orden')}" onclick="filtrarPorTipoError('orden')" title="Clic para ver solo avisos sin Orden">Orden<span class="arrow">▾</span></th>
       <th class="${thClase('textobreve,redaccion')}" onclick="filtrarPorTipoError('textobreve,redaccion')" title="Clic para ver solo errores de código/redacción">Objeto / Texto breve<span class="arrow">▾</span></th>
       <th class="${thClase('conjunto')}" onclick="filtrarPorTipoError('conjunto')" title="Clic para ver solo conjuntos incorrectos">Conjunto<span class="arrow">▾</span></th>
@@ -2874,7 +2880,7 @@
       }
 
       const probOrden = f.problemas.filter(p => p.tipo === 'orden');
-      const probPos = f.problemas.filter(p => p.tipo === 'sinposicion' || p.tipo === 'posiciones' || p.tipo === 'responsableduplicado');
+      const probPos = f.problemas.filter(p => p.tipo === 'sinposicion' || p.tipo === 'posiciones' || p.tipo === 'responsableduplicado' || p.tipo === 'sinresponsable');
       const probObjeto = f.problemas.filter(p => p.tipo === 'textobreve' || p.tipo === 'redaccion' || p.tipo === 'motivo');
       const probConjunto = f.problemas.filter(p => p.tipo === 'conjunto');
       const probPto = f.problemas.filter(p => p.tipo === 'ptotrabajo');
@@ -2924,6 +2930,20 @@
         celdaDuracion = `<span class="badge ${claseDur}"><i class="bi bi-${icono}"></i> ${mins} min</span>`;
       }
 
+      const hayErrorPos = probPos.some(p => !corrEntry[p.tipo]);
+      const posList = f.posiciones || [];
+      let celdaPosiciones;
+      if (!posList.length) {
+        celdaPosiciones = '<span style="color:var(--muted)">—</span>';
+      } else if (hayErrorPos) {
+        // Con error: se muestran todas las posiciones con sus nombres
+        celdaPosiciones = posList.map(d => `<div>${escapeHtml(d.pos || '?')} · ${escapeHtml(d.txt || '—')}</div>`).join('');
+      } else {
+        // Todo bien: solo "1 · Correctivo Remoto/Sito"
+        const base = posList.find(d => /^correctivo/i.test((d.txt || '').trim())) || posList[0];
+        celdaPosiciones = `<div>${escapeHtml(base.pos || '1')} · ${escapeHtml(base.txt || '—')}</div>`;
+      }
+
       let bloqueSinReferencia = '';
       if (f.sinReferencia) {
         let idxSug = -1;
@@ -2940,10 +2960,10 @@
 
       html += `<tr class="${claseFila}">
         <td>${f.fila}</td>
-        <td>${escapeHtml(f.notificacion)}</td>
-        <td>${escapeHtml(f.responsable) || '<span style="color:var(--muted)">—</span>'}</td>
-        <td class="${probPos.some(p => !corrEntry[p.tipo]) ? 'cell-bad' : 'cell-ok'}">${(f.posiciones || []).map(d => `<div class="cell-sub">${escapeHtml(d.pos || '?')} · ${escapeHtml(d.txt || '—')}</div>`).join('') || '<span style="color:var(--muted)">—</span>'}${bloqueErrores(probPos)}</td>
-        <td>${escapeHtml(f.orden) || '<span style="color:var(--bad)">(vacío)</span>'}${bloqueErrores(probOrden)}</td>
+        <td class="cell-ok">${escapeHtml(f.notificacion)}</td>
+        <td class="${f.responsable ? 'cell-ok' : ''}">${escapeHtml(f.responsable) || '<span style="color:var(--muted)">—</span>'}</td>
+        <td class="${hayErrorPos ? 'cell-bad' : 'cell-ok'}">${celdaPosiciones}${bloqueErrores(probPos)}</td>
+        <td class="${f.orden && !probOrden.some(p => !corrEntry[p.tipo]) ? 'cell-ok' : ''}">${escapeHtml(f.orden) || '<span style="color:var(--bad)">(vacío)</span>'}${bloqueErrores(probOrden)}</td>
         <td class="${claseObjeto}">${celdaObjetoTexto}${bloqueErrores(probObjeto)}${bloqueSinReferencia}</td>
         <td>${escapeHtml(f.denomConjunto)}<br><span style="color:var(--muted)">${escapeHtml(f.conjuntoCodigo)}</span>${bloqueErrores(probConjunto)}</td>
         <td class="${clasePtoTrab}">${escapeHtml(f.ptoTrabajo)}${bloqueErrores(probPto)}</td>
