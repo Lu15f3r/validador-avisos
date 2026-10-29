@@ -355,7 +355,9 @@
         <select id="filtroTipoError" onchange="renderResultadosFiltrados()">
           <option value="">Tipo de error: todos</option>
           <option value="orden">Falta la Orden</option>
-          <option value="sinposicion">Sin posición (sin segunda posición)</option>
+          <option value="sinposicion,posiciones">Posiciones (sin posición / cantidad errada)</option>
+          <option value="sinposicion">— Solo sin posición</option>
+          <option value="posiciones">— Solo cantidad errada (Remoto 2 / Sitio 3)</option>
           <option value="textobreve,redaccion">Descripción errada (código o redacción)</option>
           <option value="textobreve">— Solo código no coincide</option>
           <option value="redaccion">— Solo redacción no coincide</option>
@@ -741,6 +743,7 @@
     textobreve: 'Descripción errada',
     redaccion: 'Descripción errada',
     sinposicion: 'Sin posición',
+    posiciones: 'Posiciones erradas',
     conjunto: 'Conjunto errado',
     ptotrabajo: 'Pto.trabajo errado',
     status: 'Sin notificar',
@@ -1816,19 +1819,28 @@
 
     const get = (partes, k) => (colIdx[k] !== undefined && colIdx[k] !== -1) ? String(partes[colIdx[k]] ?? '').trim() : '';
 
-    // ---- Conteo de posiciones por notificación (para detectar avisos "Sin posición") ----
-    // Cada aviso debe repetirse en el Excel (posición 1, 2, 3...). Si la notificación aparece
-    // una sola vez, o no existe ninguna fila con Posición 2, el aviso no tiene segunda posición.
+    // ---- Posiciones por notificación ----
+    // Cada aviso se repite una fila por posición. Regla:
+    //   Correctivo REMOTO  -> exactamente 2 posiciones (1,2)
+    //   Correctivo SITO    -> exactamente 3 posiciones (1,2,3)
+    // El tipo se lee de "Texto código parte objeto" (posición 1: "Correctivo Remoto/Sito").
     const infoPosiciones = {};
     if (formatoB && colIdx.notificacion !== -1) {
       datos.forEach(partes => {
         if (!partes || partes.every(c => c==null || String(c).trim()==='')) return;
         const notif = get(partes, 'notificacion');
         if (!notif) return;
-        if (!infoPosiciones[notif]) infoPosiciones[notif] = { filas: 0, tienePos2: false };
-        infoPosiciones[notif].filas++;
-        if (colIdx.posicion !== -1 && get(partes, 'posicion').replace(/\.0$/,'') === '2') infoPosiciones[notif].tienePos2 = true;
+        if (!infoPosiciones[notif]) infoPosiciones[notif] = { filas: 0, detalle: [], tipo: null };
+        const ip = infoPosiciones[notif];
+        ip.filas++;
+        const pos = colIdx.posicion !== -1 ? get(partes, 'posicion').replace(/\.0$/,'') : '';
+        const txt = get(partes, 'textoParteObjeto');
+        ip.detalle.push({ pos, txt });
+        const tn = normalizarTexto(txt);
+        if (tn.includes('REMOTO')) ip.tipo = 'remoto';
+        else if (tn.includes('SITO') || tn.includes('SITIO')) ip.tipo = 'sitio';
       });
+      Object.values(infoPosiciones).forEach(ip => ip.detalle.sort((x,y) => String(x.pos).localeCompare(String(y.pos))));
     }
 
     // Algunos archivos traen VARIAS filas por cada aviso (misma Notificación repetida):
@@ -1898,12 +1910,23 @@
 
       if (!orden) problemas.push({ tipo: 'orden', texto: 'Orden vacía — este aviso debe tener un número de Orden asignado' });
 
-      // ---- Sin segunda posición (solo formato con Posición/repeticiones) ----
-      if (formatoB && notificacion && infoPosiciones[notificacion]) {
-        const ip = infoPosiciones[notificacion];
-        const sinPos2 = ip.filas < 2 || (colIdx.posicion !== -1 && !ip.tienePos2);
-        if (sinPos2) {
-          problemas.push({ tipo: 'sinposicion', texto: `Sin posición — la notificación ${notificacion} aparece ${ip.filas} vez/veces en el Excel y no tiene segunda posición (responsable)` });
+      // ---- Cantidad de posiciones según Remoto / Sitio ----
+      const ipFila = (formatoB && notificacion) ? infoPosiciones[notificacion] : null;
+      if (ipFila) {
+        const tieneColPos = colIdx.posicion !== -1;
+        const posReales = ipFila.detalle.map(d => d.pos).filter(Boolean).join(',');
+        const nombreTipo = ipFila.tipo === 'remoto' ? 'Remoto' : (ipFila.tipo === 'sitio' ? 'Sitio' : null);
+        if (ipFila.filas < 2) {
+          problemas.push({ tipo: 'sinposicion', texto: `Sin segunda posición — la notificación ${notificacion} aparece ${ipFila.filas} sola vez en el Excel${nombreTipo ? ` (${nombreTipo}: debe tener ${ipFila.tipo === 'remoto' ? '2 posiciones (1,2)' : '3 posiciones (1,2,3)'})` : ''}` });
+        } else if (nombreTipo) {
+          const esperado = ipFila.tipo === 'remoto' ? 2 : 3;
+          const posEsperadas = esperado === 2 ? '1,2' : '1,2,3';
+          const mal = ipFila.filas !== esperado || (tieneColPos && posReales !== posEsperadas);
+          if (mal) {
+            problemas.push({ tipo: 'posiciones', texto: `Aviso ${nombreTipo}: debe tener ${esperado} posiciones (${posEsperadas}) y tiene ${ipFila.filas}${tieneColPos ? ` (${posReales})` : ''}` });
+          }
+        } else {
+          problemas.push({ tipo: 'posiciones', texto: `No se identifica Remoto/Sitio en "Texto código parte objeto" — la posición 1 debe decir "Correctivo Remoto" o "Correctivo Sito"` });
         }
       }
 
@@ -2050,7 +2073,7 @@
         error: false, fila: i + 1,
         notificacion, orden, objeto, textoBreve, denomConjunto, conjuntoCodigo,
         ptoTrabajo, status, familia, novedad, diffHtml, diffNovedadHtml,
-        sinReferencia, sugerenciaReferencia, sugerenciaRedaccion, problemas, ok: problemas.length === 0, notificado, duracionMinutos, responsable, tipoCorrectivo, tieneEtm: colIdx.estInst !== undefined && colIdx.estInst !== -1
+        sinReferencia, sugerenciaReferencia, sugerenciaRedaccion, problemas, ok: problemas.length === 0, notificado, duracionMinutos, responsable, tipoCorrectivo, posiciones: ipFila ? ipFila.detalle : [], tieneEtm: colIdx.estInst !== undefined && colIdx.estInst !== -1
       });
     });
 
@@ -2290,11 +2313,9 @@
     const avisosUnicos = new Set(lista.map(x => x.clave)).size;
     const porTipo = {};
     const porNovedad = {};
-    const vistosTipo = new Set();
     lista.forEach(x => {
       const etq = ETIQUETAS_TIPO[x.tipo] || x.tipo;
-      const kTipo = x.clave + '|' + etq;
-      if (!vistosTipo.has(kTipo)) { vistosTipo.add(kTipo); porTipo[etq] = (porTipo[etq]||0) + 1; }
+      porTipo[etq] = (porTipo[etq]||0) + 1;
       const key = x.novedad || '(sin novedad identificada)';
       porNovedad[key] = (porNovedad[key]||0) + 1;
     });
@@ -2367,12 +2388,7 @@
 
     // Hoja resumen: solo "Por tipo de falla"
     const porTipo = {};
-    const vistosTipoCsv = new Set();
-    lista.forEach(x => {
-      const etq = ETIQUETAS_TIPO[x.tipo] || x.tipo;
-      const k = x.clave + '|' + etq;
-      if (!vistosTipoCsv.has(k)) { vistosTipoCsv.add(k); porTipo[etq] = (porTipo[etq]||0)+1; }
-    });
+    lista.forEach(x => { const etq = ETIQUETAS_TIPO[x.tipo] || x.tipo; porTipo[etq] = (porTipo[etq]||0)+1; });
     const resumenFilas = [
       { 'Resumen': '— Por tipo de falla —', 'Cantidad': '' },
       ...Object.entries(porTipo).sort((a,b)=>b[1]-a[1]).map(([t,n]) => ({ 'Resumen': ETIQUETAS_TIPO[t]||t, 'Cantidad': n })),
@@ -2669,7 +2685,7 @@
         'Duración (min)': (f.duracionMinutos !== null && f.duracionMinutos !== undefined) ? Math.round(f.duracionMinutos) : '',
         'Notificado': f.notificado ? 'Sí' : 'No',
         'Estado': pendientes.length ? 'Revisar' : (f.problemas.length ? 'Corregido' : (f.sinReferencia ? 'Sin referencia' : 'OK')),
-        'Fallas pendientes': [...new Set(pendientes.map(p => ETIQUETAS_TIPO[p.tipo] || p.tipo))].join(' | '),
+        'Fallas pendientes': pendientes.map(p => ETIQUETAS_TIPO[p.tipo] || p.tipo).join(' | '),
         'Detalle de fallas pendientes': pendientes.map(p => p.texto).join(' | ')
       };
     });
@@ -2781,8 +2797,8 @@
     const thDuracionClase = 'filterable' + (duracionFiltro ? ' active-filter' : '');
     const thDuracionSub = duracionFiltro ? `<span class="subfiltro">&gt; ${duracionFiltro} min</span>` : '';
 
-    let html = `<table><thead><tr><th>#</th><th>Notif.</th>
-      <th class="${thClase('sinposicion')}" onclick="filtrarPorTipoError('sinposicion')" title="Clic para ver solo avisos sin segunda posición">Responsable<span class="arrow">▾</span></th>
+    let html = `<table><thead><tr><th>#</th><th>Notif.</th><th>Responsable</th>
+      <th class="${thClase('sinposicion,posiciones')}" onclick="filtrarPorTipoError('sinposicion,posiciones')" title="Clic para ver solo avisos con posiciones erradas">Posición / Parte objeto<span class="arrow">▾</span></th>
       <th class="${thClase('orden')}" onclick="filtrarPorTipoError('orden')" title="Clic para ver solo avisos sin Orden">Orden<span class="arrow">▾</span></th>
       <th class="${thClase('textobreve,redaccion')}" onclick="filtrarPorTipoError('textobreve,redaccion')" title="Clic para ver solo errores de código/redacción">Objeto / Texto breve<span class="arrow">▾</span></th>
       <th class="${thClase('conjunto')}" onclick="filtrarPorTipoError('conjunto')" title="Clic para ver solo conjuntos incorrectos">Conjunto<span class="arrow">▾</span></th>
@@ -2840,7 +2856,7 @@
       }
 
       const probOrden = f.problemas.filter(p => p.tipo === 'orden');
-      const probPos = f.problemas.filter(p => p.tipo === 'sinposicion');
+      const probPos = f.problemas.filter(p => p.tipo === 'sinposicion' || p.tipo === 'posiciones');
       const probObjeto = f.problemas.filter(p => p.tipo === 'textobreve' || p.tipo === 'redaccion' || p.tipo === 'motivo');
       const probConjunto = f.problemas.filter(p => p.tipo === 'conjunto');
       const probPto = f.problemas.filter(p => p.tipo === 'ptotrabajo');
@@ -2907,7 +2923,8 @@
       html += `<tr class="${claseFila}">
         <td>${f.fila}</td>
         <td>${escapeHtml(f.notificacion)}</td>
-        <td${probPos.some(p => !corrEntry[p.tipo]) ? ' class="cell-bad"' : ''}>${escapeHtml(f.responsable) || '<span style="color:var(--muted)">—</span>'}${bloqueErrores(probPos)}</td>
+        <td>${escapeHtml(f.responsable) || '<span style="color:var(--muted)">—</span>'}</td>
+        <td class="${probPos.some(p => !corrEntry[p.tipo]) ? 'cell-bad' : 'cell-ok'}">${(f.posiciones || []).map(d => `<div class="cell-sub">${escapeHtml(d.pos || '?')} · ${escapeHtml(d.txt || '—')}</div>`).join('') || '<span style="color:var(--muted)">—</span>'}${bloqueErrores(probPos)}</td>
         <td>${escapeHtml(f.orden) || '<span style="color:var(--bad)">(vacío)</span>'}${bloqueErrores(probOrden)}</td>
         <td class="${claseObjeto}">${celdaObjetoTexto}${bloqueErrores(probObjeto)}${bloqueSinReferencia}</td>
         <td>${escapeHtml(f.denomConjunto)}<br><span style="color:var(--muted)">${escapeHtml(f.conjuntoCodigo)}</span>${bloqueErrores(probConjunto)}</td>
