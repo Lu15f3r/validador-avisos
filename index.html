@@ -107,6 +107,12 @@
   }
   button:hover { background: #4a82f5; border-color: #4a82f5; }
   button:active { transform: translateY(1px); }
+  .modal-resp-bg { position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 1000; display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; }
+  .modal-resp { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; width: min(1100px, 100%); padding: 20px; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+  .modal-resp h3 { margin: 0 0 4px; font-size: 16px; }
+  .modal-resp .acciones { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+  .nov-chip { display: inline-block; padding: 2px 8px; border-radius: 999px; background: rgba(229,72,77,.15); border: 1px solid rgba(229,72,77,.5); color: var(--bad); font-size: 11px; font-weight: 700; margin-right: 6px; }
+  .resp-clic { cursor: pointer; text-decoration: underline dotted; }
   button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); box-shadow: none; }
   button.secondary:hover { border-color: var(--accent); color: var(--accent); background: rgba(51,115,242,0.06); }
   button.danger { background: transparent; border: 1px solid var(--bad); color: var(--bad); padding: 4px 8px; font-size: 11px; box-shadow: none; }
@@ -597,6 +603,8 @@
       <canvas id="graficoResponsables" height="140"></canvas>
     </div>
 
+    <div class="panel" id="consolidadoPanel"></div>
+
     <div class="panel" id="historialPanel"></div>
 
     <div class="panel">
@@ -641,7 +649,7 @@
     // las nuevas "sb_publishable_..." solo van en apikey.
     if (/^eyJ/.test(SUPABASE_ANON_KEY)) HEADERS['Authorization'] = 'Bearer ' + SUPABASE_ANON_KEY;
     const TODAS_LAS_CLAVES = ['tabla_referencia', 'diccionario_typos', 'referencia_estatus',
-                              'referencia_motivo', 'historial_validaciones', 'corregidos_avisos'];
+                              'referencia_motivo', 'historial_validaciones', 'corregidos_avisos', 'consolidado_avisos'];
     let cache = null;      // { clave: valor } tal como está en la nube
     let cargando = null;   // promesa de la primera carga (evita 6 peticiones en paralelo)
     let soloLectura = false;
@@ -2134,6 +2142,7 @@
   }
 
   function renderHistorial() {
+    renderConsolidado();
     const panel = document.getElementById('historialPanel');
     if (!panel) return;
     if (!historial.length) {
@@ -2183,6 +2192,190 @@
         }
       }
     });
+  }
+
+
+  // ---------- Consolidado de avisos malos por responsable (todos los archivos, últimos 3 meses) ----------
+  // Se guarda un registro por aviso (notificación u orden) con las fallas que tuvo en el ÚLTIMO archivo
+  // donde apareció. Si un archivo posterior trae el aviso sin fallas, queda como "resuelto".
+  let consolidado = {};
+  let consolidadoDetalle = [];   // lista usada por la tabla / modal / exportar
+  const NOMBRE_SIN_RESP = '(Sin responsable)';
+
+  async function cargarConsolidado() {
+    try { const r = await window.storage.get('consolidado_avisos', false); consolidado = JSON.parse(r.value) || {}; }
+    catch (e) { consolidado = {}; }
+  }
+
+  async function guardarConsolidado(nombreArchivo, filas) {
+    try { await cargarConsolidado(); } catch (e) {}   // toma lo último de la nube antes de mezclar
+    const ahora = new Date().toISOString();
+    filas.forEach(f => {
+      const clave = claveAviso(f);
+      if (!clave) return;
+      const existente = consolidado[clave];
+      if (f.problemas && f.problemas.length) {
+        consolidado[clave] = {
+          r: f.responsable || '',
+          n: f.notificacion || '',
+          o: f.orden || '',
+          ob: f.objeto || '',
+          tb: f.textoBreve || '',
+          p: f.problemas.map(x => [x.tipo, x.texto]),
+          a: nombreArchivo,
+          primera: existente ? existente.primera : ahora,
+          ultima: ahora,
+          ok: false
+        };
+      } else if (existente && !existente.ok) {
+        existente.ok = true;            // ya vino sin fallas en un archivo posterior
+        existente.resuelto = ahora;
+      }
+    });
+    const limite = fechaLimiteRetencion().toISOString();
+    Object.keys(consolidado).forEach(k => { if ((consolidado[k].ultima || '') < limite) delete consolidado[k]; });
+    try { await window.storage.set('consolidado_avisos', JSON.stringify(consolidado), false); } catch (e) { console.error(e); }
+    if (document.getElementById('view-informe').classList.contains('active')) renderConsolidado();
+  }
+
+  function pendientesConsolidado(clave, reg) {
+    if (reg.ok) return [];
+    const ce = corregidos[clave] || {};
+    return (reg.p || []).filter(x => !ce[x[0]]);
+  }
+
+  function resumenConsolidado() {
+    const limite = fechaLimiteRetencion().toISOString();
+    const porPersona = {};
+    Object.entries(consolidado).forEach(([clave, reg]) => {
+      if ((reg.ultima || '') < limite) return;
+      const nombre = reg.r || NOMBRE_SIN_RESP;
+      if (!porPersona[nombre]) porPersona[nombre] = { persona: nombre, avisos: [], malos: 0, resueltos: 0, fallas: 0 };
+      const d = porPersona[nombre];
+      const pend = pendientesConsolidado(clave, reg);
+      d.avisos.push({ clave, reg, pend });
+      if (pend.length) { d.malos++; d.fallas += pend.length; } else d.resueltos++;
+    });
+    return Object.values(porPersona).sort((a,b) => b.malos - a.malos || b.resueltos - a.resueltos);
+  }
+
+  function renderConsolidado() {
+    const panel = document.getElementById('consolidadoPanel');
+    if (!panel) return;
+    consolidadoDetalle = resumenConsolidado();
+    if (!consolidadoDetalle.length) {
+      panel.innerHTML = `<div class="form-title" style="margin-bottom:10px;"><i class="bi bi-collection"></i> Consolidado por responsable (últimos ${MESES_RETENCION} meses)</div>
+        <div class="empty">Todavía no hay consolidado — se va guardando solo cada vez que subís un Excel y se conserva ${MESES_RETENCION} meses.</div>`;
+      return;
+    }
+    const totMalos = consolidadoDetalle.reduce((a,d) => a + d.malos, 0);
+    const totRes = consolidadoDetalle.reduce((a,d) => a + d.resueltos, 0);
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+        <div class="form-title" style="margin:0;"><i class="bi bi-collection"></i> Consolidado por responsable (todos los archivos subidos · últimos ${MESES_RETENCION} meses)</div>
+        <button class="secondary" style="margin-left:auto;" onclick="exportarConsolidadoTodos()"><i class="bi bi-file-earmark-spreadsheet"></i> Exportar consolidado (Excel)</button>
+      </div>
+      <div style="color:var(--muted);font-size:12.5px;margin-bottom:8px;">
+        <b style="color:var(--bad)">${totMalos}</b> avisos malos pendientes · <b style="color:var(--ok)">${totRes}</b> resueltos (corregidos o que llegaron bien en un archivo posterior)
+      </div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Responsable</th><th>Avisos malos (pendientes)</th><th>Fallas</th><th>Resueltos</th><th>Total avisos con falla</th><th>Exportar</th></tr></thead>
+        <tbody>
+          ${consolidadoDetalle.map((d, i) => `
+            <tr>
+              <td><span class="resp-clic" onclick="verConsolidadoResponsable(${i})" title="Clic para ver los avisos y su novedad">${escapeHtml(d.persona)}</span></td>
+              <td>${d.malos > 0 ? `<span class="err-clic" style="color:var(--bad);font-weight:800;" onclick="verConsolidadoResponsable(${i})">${d.malos}</span>` : '<span style="color:var(--ok)">0</span>'}</td>
+              <td>${d.fallas}</td>
+              <td style="color:var(--ok)">${d.resueltos}</td>
+              <td>${d.avisos.length}</td>
+              <td><button class="secondary" onclick="exportarConsolidadoResponsable(${i})"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button></td>
+            </tr>`).join('')}
+        </tbody>
+      </table></div>`;
+  }
+
+  function fmtFechaCorta(iso) {
+    try { return new Date(iso).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: '2-digit' }); } catch (e) { return ''; }
+  }
+
+  function verConsolidadoResponsable(i) {
+    const d = consolidadoDetalle[i];
+    if (!d) return;
+    cerrarModalResp();
+    const lista = [...d.avisos].sort((a,b) => (b.pend.length > 0) - (a.pend.length > 0) || (b.reg.ultima || '').localeCompare(a.reg.ultima || ''));
+    const bg = document.createElement('div');
+    bg.className = 'modal-resp-bg';
+    bg.id = 'modalResp';
+    bg.addEventListener('click', e => { if (e.target === bg) cerrarModalResp(); });
+    bg.innerHTML = `
+      <div class="modal-resp">
+        <h3><i class="bi bi-person-fill"></i> ${escapeHtml(d.persona)} — consolidado ${MESES_RETENCION} meses</h3>
+        <div style="color:var(--muted);font-size:12.5px;">${d.avisos.length} avisos con falla · <b style="color:var(--bad)">${d.malos} pendientes</b> · <b style="color:var(--ok)">${d.resueltos} resueltos</b></div>
+        <div class="acciones">
+          <button onclick="exportarConsolidadoResponsable(${i})"><i class="bi bi-file-earmark-spreadsheet"></i> Exportar este responsable (Excel)</button>
+          <button class="secondary" onclick="cerrarModalResp()" style="margin-left:auto;"><i class="bi bi-x-lg"></i> Cerrar</button>
+        </div>
+        <div style="overflow-x:auto;"><table>
+          <thead><tr><th>Fecha</th><th>Archivo</th><th>Notif.</th><th>Orden</th><th>Objeto / Texto breve</th><th>Novedad</th><th>Estado</th></tr></thead>
+          <tbody>
+            ${lista.map(x => `
+              <tr>
+                <td>${escapeHtml(fmtFechaCorta(x.reg.ultima))}</td>
+                <td style="color:var(--muted);font-size:12px;">${escapeHtml(x.reg.a || '')}</td>
+                <td>${escapeHtml(x.reg.n || '')}</td>
+                <td>${escapeHtml(x.reg.o || '') || '<span style="color:var(--bad)">(vacío)</span>'}</td>
+                <td>${escapeHtml(x.reg.ob || '')}<br><span style="color:var(--muted)">${escapeHtml(x.reg.tb || '')}</span></td>
+                <td>${(x.pend.length ? x.pend : x.reg.p || []).map(pp => `<div style="margin-bottom:4px;"><span class="nov-chip" ${x.pend.length ? '' : 'style="opacity:.5"'}>${escapeHtml(ETIQUETAS_TIPO[pp[0]] || pp[0])}</span><span style="color:var(--muted);font-size:12px;">${escapeHtml(pp[1] || '')}</span></div>`).join('')}</td>
+                <td>${x.pend.length ? '<span style="color:var(--bad);font-weight:700;">Pendiente</span>' : '<span style="color:var(--ok);font-weight:700;">Resuelto</span>'}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table></div>
+      </div>`;
+    document.body.appendChild(bg);
+  }
+
+  function filaConsolidadoExcel(persona, x) {
+    return {
+      'Responsable': persona,
+      'Fecha (último archivo)': fmtFechaCorta(x.reg.ultima),
+      'Primera vez visto': fmtFechaCorta(x.reg.primera),
+      'Archivo': x.reg.a || '',
+      'Notificación': x.reg.n || '',
+      'Orden': x.reg.o || '',
+      'Denominación objeto técnico': x.reg.ob || '',
+      'Texto breve': x.reg.tb || '',
+      'Estado': x.pend.length ? 'Pendiente' : 'Resuelto',
+      'Fallas': (x.pend.length ? x.pend : x.reg.p || []).map(pp => ETIQUETAS_TIPO[pp[0]] || pp[0]).join(' | '),
+      'Novedad (detalle)': (x.pend.length ? x.pend : x.reg.p || []).map(pp => pp[1]).join(' | ')
+    };
+  }
+  const COLS_CONSOLIDADO = [{wch:28},{wch:14},{wch:14},{wch:26},{wch:12},{wch:12},{wch:22},{wch:28},{wch:11},{wch:30},{wch:60}];
+
+  function exportarConsolidadoResponsable(i) {
+    const d = consolidadoDetalle[i];
+    if (!d || typeof XLSX === 'undefined') return;
+    const filas = d.avisos.map(x => filaConsolidadoExcel(d.persona, x));
+    const ws = XLSX.utils.json_to_sheet(filas);
+    ws['!cols'] = COLS_CONSOLIDADO;
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Consolidado');
+    const nombre = d.persona.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9]+/g,'_').replace(/^_|_$/g,'');
+    XLSX.writeFile(wb, 'consolidado_' + nombre + '_' + new Date().toISOString().slice(0,10) + '.xlsx');
+  }
+
+  function exportarConsolidadoTodos() {
+    if (!consolidadoDetalle.length || typeof XLSX === 'undefined') return;
+    const wb = XLSX.utils.book_new();
+    const resumen = consolidadoDetalle.map(d => ({ 'Responsable': d.persona, 'Avisos malos (pendientes)': d.malos, 'Fallas': d.fallas, 'Resueltos': d.resueltos, 'Total avisos con falla': d.avisos.length }));
+    const ws1 = XLSX.utils.json_to_sheet(resumen);
+    ws1['!cols'] = [{wch:30},{wch:24},{wch:10},{wch:12},{wch:22}];
+    XLSX.utils.book_append_sheet(wb, ws1, 'Resumen');
+    const detalle = [];
+    consolidadoDetalle.forEach(d => d.avisos.forEach(x => detalle.push(filaConsolidadoExcel(d.persona, x))));
+    const ws2 = XLSX.utils.json_to_sheet(detalle);
+    ws2['!cols'] = COLS_CONSOLIDADO;
+    XLSX.utils.book_append_sheet(wb, ws2, 'Detalle');
+    XLSX.writeFile(wb, 'consolidado_responsables_' + new Date().toISOString().slice(0,10) + '.xlsx');
   }
 
   // ---------- Graficos del informe ----------
@@ -2267,20 +2460,112 @@
       .sort((a,b) => b.conProblemas - a.conProblemas);
 
     div.innerHTML = `
-      <table><thead><tr><th>Responsable</th><th>Total avisos</th><th>Con problemas</th><th>% con problemas</th></tr></thead>
+      <table><thead><tr><th>Responsable</th><th>Total avisos</th><th>Con problemas</th><th>% con problemas</th><th>Exportar</th></tr></thead>
       <tbody>
-        ${filas.map(f => `
+        ${filas.map((f, i) => `
           <tr>
-            <td>${escapeHtml(f.persona)}</td>
+            <td><span class="resp-clic" onclick="verAvisosResponsable(${i})" title="Clic para ver sus avisos">${escapeHtml(f.persona)}</span></td>
             <td>${f.total}</td>
-            <td>${f.conProblemas > 0 ? `<span class="err-clic" style="color:var(--bad);font-weight:800;" onclick="filtrarPorResponsable('${escapeHtml(f.persona).replace(/'/g,"\\'")}')" title="Clic para ver solo los avisos de esta persona">${f.conProblemas}</span>` : `<span style="color:var(--ok)">${f.conProblemas}</span>`}</td>
+            <td>${f.conProblemas > 0 ? `<span class="err-clic" style="color:var(--bad);font-weight:800;" onclick="verAvisosResponsable(${i})" title="Clic para ver qué avisos tienen error y su novedad">${f.conProblemas}</span>` : `<span style="color:var(--ok)">${f.conProblemas}</span>`}</td>
             <td>${f.pct}%</td>
+            <td><button class="secondary" onclick="exportarResponsable(${i})" title="Exportar los avisos de esta persona"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button></td>
           </tr>
         `).join('')}
       </tbody></table>
     `;
 
+    respLista = filas;
     renderGraficoResponsables(filas);
+  }
+
+  let respLista = [];
+
+  function pendientesDeFila(f) {
+    const clave = claveAviso(f);
+    const ce = clave ? (corregidos[clave] || {}) : {};
+    return f.problemas.filter(p => !ce[p.tipo]);
+  }
+
+  function cerrarModalResp() {
+    const m = document.getElementById('modalResp');
+    if (m) m.remove();
+  }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarModalResp(); });
+
+  function verAvisosResponsable(i) {
+    const r = respLista[i];
+    if (!r) return;
+    cerrarModalResp();
+    const malos = ultimasFilas.filter(f => f.responsable === r.persona && pendientesDeFila(f).length > 0);
+    const nombreJs = r.persona.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const bg = document.createElement('div');
+    bg.className = 'modal-resp-bg';
+    bg.id = 'modalResp';
+    bg.addEventListener('click', e => { if (e.target === bg) cerrarModalResp(); });
+    bg.innerHTML = `
+      <div class="modal-resp">
+        <h3><i class="bi bi-person-fill"></i> ${escapeHtml(r.persona)}</h3>
+        <div style="color:var(--muted);font-size:12.5px;">${r.total} avisos en total · <b style="color:${malos.length ? 'var(--bad)' : 'var(--ok)'}">${malos.length} con problemas</b></div>
+        <div class="acciones">
+          <button onclick="exportarResponsable(${i})"><i class="bi bi-file-earmark-spreadsheet"></i> Exportar este responsable (Excel)</button>
+          <button class="secondary" onclick="cerrarModalResp(); filtrarPorResponsable('${escapeHtml(nombreJs)}')"><i class="bi bi-funnel"></i> Ver en Validar avisos</button>
+          <button class="secondary" onclick="cerrarModalResp()" style="margin-left:auto;"><i class="bi bi-x-lg"></i> Cerrar</button>
+        </div>
+        ${malos.length ? `
+        <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>#</th><th>Notif.</th><th>Orden</th><th>Objeto / Texto breve</th><th>Novedad (fallas del aviso)</th></tr></thead>
+          <tbody>
+            ${malos.map(f => `
+              <tr>
+                <td>${f.fila}</td>
+                <td>${escapeHtml(f.notificacion)}</td>
+                <td>${escapeHtml(f.orden) || '<span style="color:var(--bad)">(vacío)</span>'}</td>
+                <td>${escapeHtml(f.objeto)}<br><span style="color:var(--muted)">${escapeHtml(f.textoBreve)}</span></td>
+                <td>${pendientesDeFila(f).map(p => `<div style="margin-bottom:4px;"><span class="nov-chip">${escapeHtml(ETIQUETAS_TIPO[p.tipo] || p.tipo)}</span><span style="color:var(--muted);font-size:12px;">${escapeHtml(p.texto)}</span></div>`).join('')}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table></div>` : '<div class="empty">Esta persona no tiene avisos con problemas pendientes.</div>'}
+      </div>`;
+    document.body.appendChild(bg);
+  }
+
+  function filaParaExcel(f) {
+    const pend = pendientesDeFila(f);
+    return {
+      'Responsable': f.responsable || '',
+      'Notificación': f.notificacion,
+      'Orden': f.orden,
+      'Denominación objeto técnico': f.objeto,
+      'Texto breve': f.textoBreve,
+      'Denominación conjunto': f.denomConjunto,
+      'Conjunto (código)': f.conjuntoCodigo,
+      'Pto.trabajo responsable': f.ptoTrabajo,
+      'Status del sistema': f.status,
+      'Duración (min)': (f.duracionMinutos !== null && f.duracionMinutos !== undefined) ? Math.round(f.duracionMinutos) : '',
+      'Notificado': f.notificado ? 'Sí' : 'No',
+      'Estado': pend.length ? 'Revisar' : (f.problemas.length ? 'Corregido' : (f.sinReferencia ? 'Sin referencia' : 'OK')),
+      'Fallas pendientes': pend.map(p => ETIQUETAS_TIPO[p.tipo] || p.tipo).join(' | '),
+      'Novedad (detalle)': pend.map(p => p.texto).join(' | ')
+    };
+  }
+
+  function exportarResponsable(i) {
+    const r = respLista[i];
+    if (!r || typeof XLSX === 'undefined') return;
+    const filas = ultimasFilas.filter(f => f.responsable === r.persona);
+    if (!filas.length) return;
+    const malos = filas.filter(f => pendientesDeFila(f).length > 0);
+    const wb = XLSX.utils.book_new();
+    const cols = [{wch:26},{wch:12},{wch:12},{wch:22},{wch:28},{wch:26},{wch:12},{wch:14},{wch:22},{wch:10},{wch:10},{wch:14},{wch:30},{wch:60}];
+    const ws1 = XLSX.utils.json_to_sheet(malos.length ? malos.map(filaParaExcel) : [{ 'Responsable': r.persona, 'Estado': 'Sin avisos con problemas' }]);
+    ws1['!cols'] = cols;
+    XLSX.utils.book_append_sheet(wb, ws1, 'Avisos con problemas');
+    const ws2 = XLSX.utils.json_to_sheet(filas.map(filaParaExcel));
+    ws2['!cols'] = cols;
+    XLSX.utils.book_append_sheet(wb, ws2, 'Todos los avisos');
+    const nombreArchivo = r.persona.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9]+/g,'_').replace(/^_|_$/g,'');
+    XLSX.writeFile(wb, 'avisos_' + nombreArchivo + '_' + new Date().toISOString().slice(0,10) + '.xlsx');
   }
 
   let chartResponsables = null;
@@ -2298,6 +2583,12 @@
       options: {
         indexAxis: 'y',
         responsive: true,
+        onClick: (evt, els) => {
+          if (!els.length) return;
+          const persona = top[els[0].index].persona;
+          verAvisosResponsable(respLista.findIndex(x => x.persona === persona));
+        },
+        onHover: (evt, els) => { const c = evt.native && evt.native.target; if (c) c.style.cursor = els.length ? 'pointer' : 'default'; },
         plugins: { legend: { display: false } },
         scales: {
           x: { ticks: { color: '#8b93a1', font: { size: 10.5 }, precision: 0 }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true },
@@ -3018,6 +3309,7 @@
         renderResultados(resultado);
         hint.textContent = file.name + ' — ' + resultado.filas.length + ' filas procesadas';
         guardarSnapshotHistorial(file.name, resultado.filas);
+        guardarConsolidado(file.name, resultado.filas);
       } catch (err) {
         hint.textContent = 'Error leyendo el archivo: ' + err.message;
         console.error(err);
@@ -3100,6 +3392,7 @@
   cargarCorregidos();
   cargarDiccionarioTypos();
   cargarHistorial();
+  cargarConsolidado();
   cargarReferenciaEstatus();
   cargarReferenciaMotivo();
 
@@ -3115,6 +3408,10 @@
     if (cambiadas.includes('historial_validaciones')) {
       await cargarHistorial();
       if (document.getElementById('view-informe').classList.contains('active')) renderHistorial();
+    }
+    if (cambiadas.includes('consolidado_avisos')) {
+      await cargarConsolidado();
+      if (document.getElementById('view-informe').classList.contains('active')) renderConsolidado();
     }
     if (cambiadas.includes('corregidos_avisos')) {
       await cargarCorregidos();
