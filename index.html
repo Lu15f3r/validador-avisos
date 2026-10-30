@@ -649,7 +649,7 @@
     // las nuevas "sb_publishable_..." solo van en apikey.
     if (/^eyJ/.test(SUPABASE_ANON_KEY)) HEADERS['Authorization'] = 'Bearer ' + SUPABASE_ANON_KEY;
     const TODAS_LAS_CLAVES = ['tabla_referencia', 'diccionario_typos', 'referencia_estatus',
-                              'referencia_motivo', 'historial_validaciones', 'corregidos_avisos', 'consolidado_avisos'];
+                              'referencia_motivo', 'historial_validaciones', 'corregidos_avisos'];
     let cache = null;      // { clave: valor } tal como está en la nube
     let cargando = null;   // promesa de la primera carga (evita 6 peticiones en paralelo)
     let soloLectura = false;
@@ -2118,8 +2118,20 @@
   let chartHistorial = null;
 
   async function cargarHistorial() {
-    try { const r = await window.storage.get('historial_validaciones', false); historial = JSON.parse(r.value) || []; }
-    catch (e) { historial = []; }
+    try {
+      const r = await window.storage.get('historial_validaciones', false);
+      const arr = JSON.parse(r.value) || [];
+      historial = arr.filter(h => !(h && h._consolidado));
+      const reg = arr.find(h => h && h._consolidado);
+      consolidado = (reg && reg.datos) || {};
+    }
+    catch (e) { /* clave aún no existe: se conserva lo que haya en memoria */ }
+  }
+
+  // El historial y el consolidado se guardan juntos en la misma clave (una sola escritura).
+  async function guardarHistorialYConsolidado() {
+    const arr = [...historial, { _consolidado: true, datos: consolidado }];
+    await window.storage.set('historial_validaciones', JSON.stringify(arr), false);
   }
 
   async function guardarSnapshotHistorial(nombreArchivo, filas) {
@@ -2137,7 +2149,7 @@
     historial = historial.filter(h => !h.fecha || h.fecha >= limiteH);
     if (historial.length > 2000) historial = historial.slice(-2000);
 
-    try { await window.storage.set('historial_validaciones', JSON.stringify(historial), false); } catch(e) {}
+    try { await guardarHistorialYConsolidado(); } catch(e) { console.error(e); }
     if (document.getElementById('view-informe').classList.contains('active')) renderHistorial();
   }
 
@@ -2203,12 +2215,11 @@
   const NOMBRE_SIN_RESP = '(Sin responsable)';
 
   async function cargarConsolidado() {
-    try { const r = await window.storage.get('consolidado_avisos', false); consolidado = JSON.parse(r.value) || {}; }
-    catch (e) { consolidado = {}; }
+    await cargarHistorial();   // el consolidado viaja dentro de 'historial_validaciones'
   }
 
   async function guardarConsolidado(nombreArchivo, filas) {
-    try { await cargarConsolidado(); } catch (e) {}   // toma lo último de la nube antes de mezclar
+    try { await cargarHistorial(); } catch (e) {}   // toma lo último de la nube antes de mezclar
     const ahora = new Date().toISOString();
     filas.forEach(f => {
       const clave = claveAviso(f);
@@ -2234,7 +2245,7 @@
     });
     const limite = fechaLimiteRetencion().toISOString();
     Object.keys(consolidado).forEach(k => { if ((consolidado[k].ultima || '') < limite) delete consolidado[k]; });
-    try { await window.storage.set('consolidado_avisos', JSON.stringify(consolidado), false); } catch (e) { console.error(e); }
+    try { await guardarHistorialYConsolidado(); } catch (e) { console.error(e); }
     if (document.getElementById('view-informe').classList.contains('active')) renderConsolidado();
   }
 
@@ -3308,8 +3319,7 @@
         const resultado = procesarFilas(filasCrudas);
         renderResultados(resultado);
         hint.textContent = file.name + ' — ' + resultado.filas.length + ' filas procesadas';
-        guardarSnapshotHistorial(file.name, resultado.filas);
-        guardarConsolidado(file.name, resultado.filas);
+        guardarSnapshotHistorial(file.name, resultado.filas).then(() => guardarConsolidado(file.name, resultado.filas));
       } catch (err) {
         hint.textContent = 'Error leyendo el archivo: ' + err.message;
         console.error(err);
@@ -3408,10 +3418,6 @@
     if (cambiadas.includes('historial_validaciones')) {
       await cargarHistorial();
       if (document.getElementById('view-informe').classList.contains('active')) renderHistorial();
-    }
-    if (cambiadas.includes('consolidado_avisos')) {
-      await cargarConsolidado();
-      if (document.getElementById('view-informe').classList.contains('active')) renderConsolidado();
     }
     if (cambiadas.includes('corregidos_avisos')) {
       await cargarCorregidos();
